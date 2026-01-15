@@ -6,6 +6,7 @@ import glob
 from torch.utils.data import Dataset, DataLoader
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+from core_design.augmentation_block import get_train_transforms, get_eval_transforms
 from transformers import CLIPProcessor
 
 # --- Configuration Block ---
@@ -118,16 +119,10 @@ class ADE20kPanopticDataset(Dataset):
             "original_size": (image.shape[1], image.shape[2]) # H, W after transform (or keep original before)
         }
 
-def get_transforms(image_size=512):
-    # CLIP Normalization constants
-    mean = (0.48145466, 0.4578275, 0.40821073)
-    std  = (0.26862954, 0.26130258, 0.27577711)
-    
-    return A.Compose([
-        A.Resize(height=image_size, width=image_size),
-        A.Normalize(mean=mean, std=std),
-        ToTensorV2(),
-    ])
+def get_transforms(image_size=512, train=True):
+    if train:
+        return get_train_transforms(image_size)
+    return get_eval_transforms(image_size)
 
 def collafe_fn(batch):
     # Custom collate because masks have variable channel (N instances)

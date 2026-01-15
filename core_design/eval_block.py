@@ -1,13 +1,21 @@
 import torch
+import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
 @torch.no_grad()
-def evaluate_model(model, dataloader, device):
+def evaluate_model(model, dataloader, device, return_debug=False):
     model.eval()
     metric = MeanAveragePrecision(iou_type="segm")
+    debug = {
+        "avg_max_score": 0.0,
+        "avg_noobj": 0.0,
+        "avg_mask_logit": 0.0,
+        "avg_keep_frac": 0.0,
+        "batches": 0,
+    }
     
     print("Running evaluation...")
     for batch in tqdm(dataloader, desc="Evaluating"):
@@ -39,6 +47,7 @@ def evaluate_model(model, dataloader, device):
             # Probabilities and labels
             prob = logits.softmax(-1) # [Q, K+1]
             scores, labels = prob[:, :-1].max(-1) # Exclude 'no-object' class
+            no_obj = prob[:, -1]
             
             # Filter low confidence
             # DETR models have low confidence initially. 
@@ -73,10 +82,26 @@ def evaluate_model(model, dataloader, device):
                 "scores": filtered_scores,
                 "labels": filtered_labels
             })
+
+            # Debug stats (per-image)
+            debug["avg_max_score"] += float(scores.mean().detach().cpu())
+            debug["avg_noobj"] += float(no_obj.mean().detach().cpu())
+            debug["avg_mask_logit"] += float(masks_logits.mean().detach().cpu())
+            debug["avg_keep_frac"] += float(keep.float().mean().detach().cpu())
+            debug["batches"] += 1
             
         metric.update(preds, formatted_targets)
         
     result = metric.compute()
+    if return_debug and debug["batches"] > 0:
+        scale = 1.0 / debug["batches"]
+        debug = {
+            "avg_max_score": debug["avg_max_score"] * scale,
+            "avg_noobj": debug["avg_noobj"] * scale,
+            "avg_mask_logit": debug["avg_mask_logit"] * scale,
+            "avg_keep_frac": debug["avg_keep_frac"] * scale,
+        }
+        return result, debug
     return result
 
 def visualize_prediction(model, dataset, idx, device):

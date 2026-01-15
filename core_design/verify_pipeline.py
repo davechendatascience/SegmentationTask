@@ -1,7 +1,7 @@
 import torch
 import torch.optim as optim
-from colab_design.model_block import CLIPPanopticModel
-from colab_design.loss_block import SetCriterion, HungarianMatcher
+from core_design.model_block import CLIPPanopticModel
+from core_design.loss_block import SetCriterion, HungarianMatcher
 
 # Configuration
 IMAGE_SIZE = 224 # Smaller for quick test

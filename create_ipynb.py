@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 
@@ -44,11 +45,18 @@ def read_file(path):
 
 # --- Content Assembly ---
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--core", type=str, default="core_design")
+args = parser.parse_args()
+core_dir = args.core
+
 # Cell 1: Header
 add_cell("markdown", "# Panoptic Segmentation with CLIP + Mask2Former (LoRA)\n\nThis notebook implements a panoptic segmentation pipeline using a CLIP backbone (fine-tuned with LoRA) and a lightweight Mask2Former-style decoder.\n\n**Note**: The dataset is downloaded manually from MIT SceneParsing to ensure stability.")
 
 # Cell 2: Setup
 add_cell("code", "!pip install transformers datasets albumentations peft torchmetrics scipy")
+if core_dir == "core_design":
+    add_cell("code", "!pip install torch-linear-assignment --no-build-isolation")
 
 # Cell 3: Imports (Hardcoded to ensure order)
 imports_code = """import os
@@ -77,24 +85,45 @@ NUM_CLASSES = 150
 """
 add_cell("code", imports_code)
 
-# Cell 4: Dataset Block
-dataset_code = read_file("colab_design/dataset_block.py")
-add_cell("code", "# --- Dataset Implementation ---\n" + dataset_code)
+if core_dir == "core_design_2":
+    add_cell("markdown", "## Mask2Former (HF) Training\nThis notebook cell contains the training blocks from `core_design_2`.")
+    aug_code = read_file("core_design_2/augmentation_block.py")
+    add_cell("code", "# --- Augmentation ---\n" + aug_code)
+    dataset_code = read_file("core_design_2/dataset_block.py")
+    dataset_code = dataset_code.replace("from core_design_2.augmentation_block import get_train_transforms, get_eval_transforms\n", "")
+    add_cell("code", "# --- Dataset Implementation ---\n" + dataset_code)
+    model_code = read_file("core_design_2/model_block.py")
+    add_cell("code", "# --- Model Architecture ---\n" + model_code)
+    eval_code = read_file("core_design_2/eval_block.py")
+    add_cell("code", "# --- Evaluation & Visualization ---\n" + eval_code)
+    loss_code = read_file("core_design_2/loss_block.py")
+    add_cell("code", "# --- Loss (Built-in) ---\n" + loss_code)
+    train_code = read_file("core_design_2/train_block.py")
+    add_cell("code", "# --- Training Loop ---\n" + train_code + "\n\n# Run training\n# main()")
+else:
+    # Cell 4: Augmentation Block
+    aug_code = read_file(f"{core_dir}/augmentation_block.py")
+    add_cell("code", "# --- Augmentation ---\n" + aug_code)
 
-# Cell 5: Model Block
-model_code = read_file("colab_design/model_block.py")
-add_cell("code", "# --- Model Architecture ---\n" + model_code)
+    # Cell 5: Dataset Block
+    dataset_code = read_file(f"{core_dir}/dataset_block.py")
+    dataset_code = dataset_code.replace(f"from {core_dir}.augmentation_block import get_train_transforms, get_eval_transforms\n", "")
+    add_cell("code", "# --- Dataset Implementation ---\n" + dataset_code)
 
-# Cell 6: Evaluation Block
-eval_code = read_file("colab_design/eval_block.py")
-add_cell("code", "# --- Evaluation & Visualization ---\n" + eval_code)
+    # Cell 6: Model Block
+    model_code = read_file(f"{core_dir}/model_block.py")
+    add_cell("code", "# --- Model Architecture ---\n" + model_code)
 
-# Cell 7: Loss Block
-loss_code = read_file("colab_design/loss_block.py")
-add_cell("code", "# --- Loss & Matcher ---\n" + loss_code)
+    # Cell 7: Evaluation Block
+    eval_code = read_file(f"{core_dir}/eval_block.py")
+    add_cell("code", "# --- Evaluation & Visualization ---\n" + eval_code)
 
-# Cell 8: Training Block (Modified Main)
-training_execution_code = """# --- Training Loop Execution ---
+    # Cell 8: Loss Block
+    loss_code = read_file(f"{core_dir}/loss_block.py")
+    add_cell("code", "# --- Loss & Matcher ---\n" + loss_code)
+
+    # Cell 9: Training Block (Modified Main)
+    training_execution_code = """# --- Training Loop Execution ---
 print(f"Using device: {DEVICE}")
 
 # 1. Data
@@ -125,7 +154,7 @@ if hasattr(torch, "compile"):
 torch.backends.cudnn.benchmark = True
 
 # 3. Loss
-matcher = HungarianMatcher()
+matcher = HungarianMatcher(use_torch_lap=True)
 # Weights updated to prioritize Hierarchical Loss (Self-Supervised + Semantic)
 weight_dict = {
     'loss_ce': 0.1,          # Reduced focal loss (let hierarchy drive)
@@ -187,7 +216,7 @@ for epoch in range(EPOCHS):
 torch.save(model.state_dict(), "clip_panoptic_lora.pth")
 print("Model saved!")
 """
-add_cell("code", training_execution_code)
+    add_cell("code", training_execution_code)
 
 
 # Output File

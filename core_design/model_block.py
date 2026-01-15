@@ -77,8 +77,12 @@ class LightMask2Former(nn.Module):
         self.num_queries = num_queries
         self.query_embed = nn.Embedding(num_queries, hidden_dim)
         
-        decoder_layer = nn.TransformerDecoderLayer(d_model=hidden_dim, nhead=8, dim_feedforward=1024)
-        self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers=3)
+        self.decoder_layers = nn.ModuleList(
+            [
+                nn.TransformerDecoderLayer(d_model=hidden_dim, nhead=8, dim_feedforward=1024)
+                for _ in range(3)
+            ]
+        )
         
         self.class_head = nn.Linear(hidden_dim, num_classes + 1)
         self.mask_head = nn.Sequential(
@@ -110,29 +114,39 @@ class LightMask2Former(nn.Module):
         
         queries = self.query_embed.weight.unsqueeze(1).repeat(1, B, 1) # [Q, B, C]
         
-        # Decode
-        out_queries = self.transformer_decoder(tgt=queries, memory=pixel_embed_flat)
-        out_queries = out_queries.permute(1, 0, 2) # [B, Q, C]
-        
+        aux_outputs = []
+        tgt = queries
+        for i, layer in enumerate(self.decoder_layers):
+            tgt = layer(tgt=tgt, memory=pixel_embed_flat)
+            out_queries = tgt.permute(1, 0, 2) # [B, Q, C]
+            pred_logits = self.class_head(out_queries)
+            mask_embed = self.mask_head(out_queries)
+            pred_masks = self.forward_mask_prediction(mask_embed, features[0])
+
+            if i < len(self.decoder_layers) - 1:
+                aux_outputs.append(
+                    {
+                        "pred_logits": pred_logits,
+                        "pred_masks": pred_masks,
+                    }
+                )
+
+        # Main Prediction (P2) from last layer
         pred_logits = self.class_head(out_queries)
-        mask_embed = self.mask_head(out_queries) # [B, Q, C]
-        
-        # Main Prediction (P2)
+        mask_embed = self.mask_head(out_queries)
         pred_masks = self.forward_mask_prediction(mask_embed, features[0])
-        
-        # Auxiliary Predictions (P3, P4) for Consistency Loss
-        # We use the SAME mask embeddings, just projected onto coarser feature maps.
-        # This forces the feature maps to be consistent.
+
+        # Consistency masks at coarser scales
         pred_masks_p3 = self.forward_mask_prediction(mask_embed, features[1])
         pred_masks_p4 = self.forward_mask_prediction(mask_embed, features[2])
-        
+
+        aux_outputs.append({"pred_masks": pred_masks_p3})
+        aux_outputs.append({"pred_masks": pred_masks_p4})
+
         return {
             "pred_logits": pred_logits,
             "pred_masks": pred_masks,
-            "aux_outputs": [
-                {"pred_masks": pred_masks_p3}, # Scale 1/8
-                {"pred_masks": pred_masks_p4}  # Scale 1/16
-            ]
+            "aux_outputs": aux_outputs,
         }
 
 class CLIPPanopticModel(nn.Module):
