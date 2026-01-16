@@ -29,7 +29,8 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 USE_M2F_CLASS_LOSS = True
 USE_POINT_SAMPLING = True
 EOS_COEF = 0.1
-RUN_VALIDATION = False
+RUN_VALIDATION = True
+EVAL_EVERY = 1
 RETURN_DEBUG_STATS = True
 VISUALIZE_SAMPLE = False
 
@@ -154,7 +155,7 @@ def main():
         print(f"Train Loss: {train_loss:.4f}")
         
         # Validation
-        if RUN_VALIDATION:
+        if RUN_VALIDATION and (epoch + 1) % EVAL_EVERY == 0:
             if RETURN_DEBUG_STATS:
                 metrics, debug = evaluate_model(model, val_loader, DEVICE, return_debug=True)
                 print(f"Validation Metrics: {metrics}")

@@ -47,6 +47,28 @@ Useful options:
 - `--mask-size` to change downsampled mask size used in matching/loss.
 - `--hier-warmup-epochs`, `--w-parent-start`, `--w-kl-start` to control the KL/hierarchy warm‑up schedule.
 
+### 4. Evaluate Validation Metrics (All Samples)
+
+`core_design` (CLIP + LightMask2Former):
+
+```bash
+python scripts/eval_validation.py \
+  --core core_design \
+  --data-dir /path/to/ADEChallengeData2016 \
+  --checkpoint /path/to/clip_panoptic_lora.pth
+```
+
+`core_design_2` (HF Mask2Former):
+
+```bash
+python scripts/eval_validation.py \
+  --core core_design_2 \
+  --data-dir /path/to/ADEChallengeData2016 \
+  --run-dir runs/mask2former_ade20k/best
+```
+
+These commands report **PQ / SQ / RQ** (panoptic quality metrics).
+
 ## Project Structure
 
 - `core_design/` — dataset, model, loss, eval, and training blocks

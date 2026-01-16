@@ -1,14 +1,64 @@
+import glob
+import os
 import torch
 import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
-from torchmetrics.detection.mean_ap import MeanAveragePrecision
+from PIL import Image
+from torchmetrics.detection import PanopticQuality
+from tqdm import tqdm
+
+def _build_panoptic_from_masks(masks, labels, scores=None, score_thresh=0.05, mask_thresh=0.5):
+    if masks.numel() == 0:
+        return None
+    if scores is not None:
+        keep = scores > score_thresh
+        masks = masks[keep]
+        labels = labels[keep]
+        scores = scores[keep]
+        if masks.numel() == 0:
+            return None
+    if scores is not None:
+        order = scores.argsort(descending=True)
+        masks = masks[order]
+        labels = labels[order]
+    masks = masks.sigmoid() if masks.dtype.is_floating_point else masks
+    masks = masks > mask_thresh
+    return masks, labels
+
+
+def _make_panoptic_tensor(masks, labels, height, width):
+    unknown = 255
+    device = masks.device if masks is not None else torch.device("cpu")
+    panoptic = torch.full((height, width, 2), unknown, dtype=torch.int64, device=device)
+    panoptic[..., 1] = 0
+    if masks is None:
+        return panoptic
+    occupied = torch.zeros((height, width), dtype=torch.bool, device=device)
+    instance_id = 1
+    for m, label in zip(masks, labels):
+        m = m.bool()
+        m = m & (~occupied)
+        if not m.any():
+            continue
+        panoptic[m, 0] = int(label)
+        panoptic[m, 1] = instance_id
+        occupied[m] = True
+        instance_id += 1
+    return panoptic
+
 
 @torch.no_grad()
-def evaluate_model(model, dataloader, device, return_debug=False):
+def evaluate_model(model, dataloader, device, return_debug=False, use_cpu_metric=True):
     model.eval()
-    metric = MeanAveragePrecision(iou_type="segm")
+    metric_device = torch.device("cpu") if use_cpu_metric else torch.device(device)
+    metric = PanopticQuality(
+        things=set(range(150)),
+        stuffs=set(),
+        allow_unknown_preds_category=True,
+        return_sq_and_rq=True,
+    ).to(metric_device)
     debug = {
         "avg_max_score": 0.0,
         "avg_noobj": 0.0,
@@ -21,76 +71,57 @@ def evaluate_model(model, dataloader, device, return_debug=False):
     for batch in tqdm(dataloader, desc="Evaluating"):
         pixel_values, targets = batch
         pixel_values = pixel_values.to(device)
-        
-        # Function to ensure targets are in format expected by torchmetrics
-        # Torchmetrics expects:
-        # - targets: list of dicts with 'masks' (bool or uint8), 'labels', 'boxes' (optional for segm but good to have)
-        formatted_targets = []
-        for t in targets:
-             # Masks: [N, H, W] -> Boolean
-            masks_bool = t['masks'].to(device) > 0.5
-            formatted_targets.append({
-                "masks": masks_bool,
-                "labels": t['class_labels'].to(device)
-            })
 
         outputs = model(pixel_values)
-        
-        # Process Outputs
-        # pred_logits: [B, Q, K+1]
-        # pred_masks: [B, Q, H, W]
+        outputs_logits = outputs["pred_logits"].detach().cpu()
+        outputs_masks = outputs["pred_masks"].detach().cpu()
+        del outputs
+
         preds = []
-        for i in range(len(formatted_targets)):
-            logits = outputs['pred_logits'][i]
-            masks_logits = outputs['pred_masks'][i]
-            
-            # Probabilities and labels
-            prob = logits.softmax(-1) # [Q, K+1]
-            scores, labels = prob[:, :-1].max(-1) # Exclude 'no-object' class
+        targets_pan = []
+        for i, t in enumerate(targets):
+            tgt_masks = t["masks"]
+            tgt_labels = t["class_labels"]
+            target_h, target_w = tgt_masks.shape[-2:]
+
+            logits = outputs_logits[i]
+            masks_logits = outputs_masks[i]
+            prob = logits.softmax(-1)
+            scores, labels = prob[:, :-1].max(-1)
             no_obj = prob[:, -1]
-            
-            # Filter low confidence
-            # DETR models have low confidence initially. 
-            # 0.5 is too high for early epochs and kills mAP (cuts off PR curve).
-            keep = scores > 0.05 
-            
-            if keep.sum() == 0:
-                # No predictions
-                preds.append({
-                    "masks": torch.zeros((0, *masks_logits.shape[-2:]), dtype=torch.bool, device=device),
-                    "scores": torch.tensor([], device=device),
-                    "labels": torch.tensor([], device=device)
-                })
-                continue
+            keep = scores > 0.05
 
-            filtered_scores = scores[keep]
-            filtered_labels = labels[keep]
-            filtered_masks = masks_logits[keep]
-            
-            # Upsample masks to target resolution (if needed, usually done by metric but let's match target)
-            # Assuming target resolution is 512x512 (same as input)
-            # Model outputs low-res or 512x512 depending on decoder upsample. 
-            # Our LightMask2Former outputs 16x downsampled or similar if not upsampled at end.
-            # Let's force upsample to IMAGE_SIZE (512)
-            target_H, target_W = formatted_targets[i]['masks'].shape[-2:]
-            
-            filtered_masks = F.interpolate(filtered_masks.unsqueeze(1), size=(target_H, target_W), mode="bilinear", align_corners=False).squeeze(1)
-            filtered_masks = filtered_masks.sigmoid() > 0.5
-            
-            preds.append({
-                "masks": filtered_masks,
-                "scores": filtered_scores,
-                "labels": filtered_labels
-            })
+            if masks_logits.shape[-2:] != (target_h, target_w):
+                masks_logits = F.interpolate(
+                    masks_logits.unsqueeze(1),
+                    size=(target_h, target_w),
+                    mode="bilinear",
+                    align_corners=False,
+                ).squeeze(1)
 
-            # Debug stats (per-image)
+            pred_masks = masks_logits
+            pred_pack = _build_panoptic_from_masks(pred_masks, labels, scores=scores, score_thresh=0.05)
+            pred_pan = _make_panoptic_tensor(
+                pred_pack[0], pred_pack[1], target_h, target_w
+            ) if pred_pack is not None else _make_panoptic_tensor(None, None, target_h, target_w)
+
+            tgt_pack = _build_panoptic_from_masks(tgt_masks, tgt_labels, scores=None)
+            tgt_pan = _make_panoptic_tensor(
+                tgt_pack[0], tgt_pack[1], target_h, target_w
+            ) if tgt_pack is not None else _make_panoptic_tensor(None, None, target_h, target_w)
+
+            preds.append(pred_pan)
+            targets_pan.append(tgt_pan)
+
             debug["avg_max_score"] += float(scores.mean().detach().cpu())
             debug["avg_noobj"] += float(no_obj.mean().detach().cpu())
             debug["avg_mask_logit"] += float(masks_logits.mean().detach().cpu())
             debug["avg_keep_frac"] += float(keep.float().mean().detach().cpu())
             debug["batches"] += 1
-            
-        metric.update(preds, formatted_targets)
+
+        preds = torch.stack(preds, dim=0).to(metric_device)
+        targets_pan = torch.stack(targets_pan, dim=0).to(metric_device)
+        metric.update(preds, targets_pan)
         
     result = metric.compute()
     if return_debug and debug["batches"] > 0:
@@ -101,11 +132,41 @@ def evaluate_model(model, dataloader, device, return_debug=False):
             "avg_mask_logit": debug["avg_mask_logit"] * scale,
             "avg_keep_frac": debug["avg_keep_frac"] * scale,
         }
-        return result, debug
-    return result
+        return {"pq": result[0], "sq": result[1], "rq": result[2]}, debug
+    return {"pq": result[0], "sq": result[1], "rq": result[2]}
+
+def _load_ade_palette(dataset):
+    root_dir = getattr(dataset, "root_dir", None)
+    split = getattr(dataset, "split", None)
+    if not root_dir or not split:
+        return None
+    ann_dir = os.path.join(root_dir, "annotations", split)
+    mask_paths = sorted(glob.glob(os.path.join(ann_dir, "*.png")))
+    if not mask_paths:
+        return None
+    with Image.open(mask_paths[0]) as img:
+        palette = img.getpalette()
+    if not palette:
+        return None
+    colors = []
+    for i in range(0, len(palette), 3):
+        colors.append(tuple(palette[i : i + 3]))
+    return colors
+
+
+def _get_palette_color(palette, label_id):
+    if not palette:
+        rng = np.random.RandomState(label_id)
+        return tuple((rng.rand(3) * 255).astype(np.uint8))
+    palette_idx = label_id + 1
+    if palette_idx < len(palette):
+        return palette[palette_idx]
+    return palette[0] if palette else (255, 255, 255)
+
 
 def visualize_prediction(model, dataset, idx, device):
     model.eval()
+    palette = _load_ade_palette(dataset)
     
     # Load raw item for display
     # We need transforms for model input, but want raw for display
@@ -115,6 +176,7 @@ def visualize_prediction(model, dataset, idx, device):
     
     # Ground Truth
     gt_masks = item_dict['masks']
+    gt_labels = item_dict['class_labels']
     
     # Inference
     with torch.no_grad():
@@ -155,9 +217,8 @@ def visualize_prediction(model, dataset, idx, device):
     # 2. Ground Truth Overlay
     combined_gt = np.zeros_like(img_disp)
     if len(gt_masks) > 0:
-        for i, m in enumerate(gt_masks):
-            color = np.random.rand(3)
-            # mask is float 0-1
+        for m, label_id in zip(gt_masks, gt_labels):
+            color = np.array(_get_palette_color(palette, int(label_id.item()))) / 255.0
             m = m.numpy()
             combined_gt[m > 0.5] = color
     
@@ -169,8 +230,8 @@ def visualize_prediction(model, dataset, idx, device):
     # 3. Prediction Overlay
     combined_pred = np.zeros_like(img_disp)
     if len(final_masks) > 0:
-        for i, m in enumerate(final_masks):
-            color = np.random.rand(3)
+        for m, label_id in zip(final_masks, final_labels):
+            color = np.array(_get_palette_color(palette, int(label_id.item()))) / 255.0
             m = m.cpu().numpy()
             combined_pred[m > 0.5] = color
             

@@ -154,6 +154,7 @@ def main(cli_args=None):
         return total / max(1, steps)
 
     best_val = float("inf")
+    eval_every = 1
     for epoch in range(int(args.epochs)):
         train_loss = run_epoch(train_loader, train=True)
         val_loss = run_epoch(val_loader, train=False)
@@ -163,6 +164,10 @@ def main(cli_args=None):
             best_val = val_loss
             base_model.save_pretrained(out_dir / "best")
             processor.save_pretrained(out_dir / "best")
+
+        if (epoch + 1) % eval_every == 0:
+            metrics = evaluate_model(model, val_loader, device)
+            print(f"val_metrics: {metrics}")
 
         if args.visualize:
             visualize_prediction(model, val_ds, 0, device)

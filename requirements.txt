@@ -11,4 +11,5 @@ tqdm
 numpy
 matplotlib
 pillow
+pycocotools
 
