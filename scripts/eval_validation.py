@@ -20,7 +20,7 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--num-workers", type=int, default=2)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
-    parser.add_argument("--checkpoint", type=str, default="clip_panoptic_lora.pth")
+    parser.add_argument("--checkpoint", type=str, default="runs/core_design_ade20k/best/clip_panoptic_lora.pth")
     parser.add_argument("--run-dir", type=str, default="runs/mask2former_ade20k/best")
     parser.add_argument("--allow-download", action="store_true")
     return parser.parse_args()

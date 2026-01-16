@@ -1,4 +1,5 @@
 import torch
+from pathlib import Path
 import numpy as np
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -33,6 +34,11 @@ RUN_VALIDATION = True
 EVAL_EVERY = 1
 RETURN_DEBUG_STATS = True
 VISUALIZE_SAMPLE = False
+RUNS_DIR = Path("runs/core_design_ade20k")
+BEST_MODEL_DIR = RUNS_DIR / "best"
+LAST_MODEL_DIR = RUNS_DIR / "last"
+BEST_MODEL_PATH = BEST_MODEL_DIR / "clip_panoptic_lora.pth"
+LAST_MODEL_PATH = LAST_MODEL_DIR / "clip_panoptic_lora.pth"
 
 def train_one_epoch(model, criterion, dataloader, optimizer, device):
     model.train()
@@ -112,6 +118,9 @@ def main():
     print(f"Using device: {DEVICE}")
     
     # 1. Data
+    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    BEST_MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    LAST_MODEL_DIR.mkdir(parents=True, exist_ok=True)
     # Assuming the dataset is ready
     train_ds = ADE20kPanopticDataset(split="train", transform=get_transforms(IMAGE_SIZE, train=True))
     val_ds = ADE20kPanopticDataset(split="validation", transform=get_transforms(IMAGE_SIZE, train=False))
@@ -149,6 +158,7 @@ def main():
     optimizer = optim.AdamW(param_dicts, weight_decay=WEIGHT_DECAY)
     
     # 5. Training Loop
+    best_pq = -1.0
     for epoch in range(EPOCHS):
         print(f"--- Epoch {epoch+1}/{EPOCHS} ---")
         train_loss = train_one_epoch(model, criterion, train_loader, optimizer, DEVICE)
@@ -163,14 +173,20 @@ def main():
             else:
                 metrics = evaluate_model(model, val_loader, DEVICE)
                 print(f"Validation Metrics: {metrics}")
+            if metrics and "pq" in metrics:
+                pq_value = float(metrics["pq"].detach().cpu())
+                if pq_value > best_pq:
+                    best_pq = pq_value
+                    torch.save(base_model.state_dict(), BEST_MODEL_PATH)
+                    print(f"Saved best model to {BEST_MODEL_PATH} (pq={best_pq:.4f})")
 
         if VISUALIZE_SAMPLE:
             rand_idx = np.random.randint(0, len(val_ds))
             visualize_prediction(model, val_ds, rand_idx, DEVICE)
         
     # Save
-    torch.save(base_model.state_dict(), "clip_panoptic_lora.pth")
-    print("Model saved!")
+    torch.save(base_model.state_dict(), LAST_MODEL_PATH)
+    print(f"Model saved to {LAST_MODEL_PATH}!")
 
 if __name__ == "__main__":
     main()
