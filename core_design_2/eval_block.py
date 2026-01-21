@@ -54,7 +54,7 @@ def _make_panoptic_tensor(masks, labels, height, width):
 
 
 @torch.no_grad()
-def evaluate_model(model, dataloader, device, use_cpu_metric=True):
+def evaluate_model(model, dataloader, device, use_cpu_metric=False):
     model.eval()
     metric_device = torch.device("cpu") if use_cpu_metric else torch.device(device)
     metric = PanopticQuality(
@@ -70,8 +70,8 @@ def evaluate_model(model, dataloader, device, use_cpu_metric=True):
         class_labels = batch["class_labels"]
 
         out = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-        logits = out.class_queries_logits.detach().cpu()
-        masks = out.masks_queries_logits.detach().cpu()
+        logits = out.class_queries_logits.detach()
+        masks = out.masks_queries_logits.detach()
         del out
 
         preds = []
@@ -81,8 +81,8 @@ def evaluate_model(model, dataloader, device, use_cpu_metric=True):
             labels = logits[i].softmax(-1)[:, :-1].max(-1).indices
             keep = scores > SCORE_THRESH
 
-            tgt_masks = mask_labels[i]
-            tgt_labels = class_labels[i]
+            tgt_masks = mask_labels[i].to(device)
+            tgt_labels = class_labels[i].to(device)
             target_h, target_w = tgt_masks.shape[-2:]
 
             pred_masks = masks[i]

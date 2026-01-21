@@ -2,6 +2,7 @@ import argparse
 import importlib
 import os
 import sys
+from pathlib import Path
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -20,7 +21,8 @@ def parse_args():
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--eval-every", type=int, default=1)
-    parser.add_argument("--save-path", type=str, default="clip_panoptic_lora.pth")
+    parser.add_argument("--run-dir", type=str, default="runs/core_design_ade20k")
+    parser.add_argument("--save-path", type=str, default=None)
     parser.add_argument("--use-m2f-class-loss", action="store_true", default=True)
     parser.add_argument("--no-m2f-class-loss", action="store_false", dest="use_m2f_class_loss")
     parser.add_argument("--use-point-sampling", action="store_true", default=True)
@@ -56,17 +58,32 @@ def set_precision(device):
         torch.backends.cudnn.benchmark = True
 
 
+def _parse_core_arg():
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--core", type=str, default="core_design")
+    return parser.parse_known_args()
+
+
 def main():
-    args, extra = parse_args()
-    if args.core == "core_design_2":
+    core_args, remaining = _parse_core_arg()
+    if core_args.core == "core_design_2":
         train_block = importlib.import_module("core_design_2.train_block")
-        return train_block.main(extra)
+        return train_block.main(remaining)
+    args, extra = parse_args()
     dataset_block = importlib.import_module(f"{args.core}.dataset_block")
     model_block = importlib.import_module(f"{args.core}.model_block")
     loss_block = importlib.import_module(f"{args.core}.loss_block")
     eval_block = importlib.import_module(f"{args.core}.eval_block")
     device = args.device
     print(f"Using device: {device}")
+    run_dir = Path(args.run_dir)
+    best_dir = run_dir / "best"
+    last_dir = run_dir / "last"
+    best_dir.mkdir(parents=True, exist_ok=True)
+    last_dir.mkdir(parents=True, exist_ok=True)
+    best_path = best_dir / "clip_panoptic_lora.pth"
+    last_path = Path(args.save_path) if args.save_path else (last_dir / "clip_panoptic_lora.pth")
+
     train_ds = dataset_block.ADE20kPanopticDataset(
         root_dir=args.data_root,
         split="train",
@@ -127,6 +144,7 @@ def main():
     ]
     optimizer = optim.AdamW(param_dicts, weight_decay=args.weight_decay)
 
+    best_pq = -1.0
     for epoch in range(args.epochs):
         print(f"--- Epoch {epoch + 1}/{args.epochs} ---")
         train_loss = train_one_epoch(model, criterion, train_loader, optimizer, device)
@@ -135,9 +153,15 @@ def main():
         if args.eval_every > 0 and (epoch + 1) % args.eval_every == 0:
             metrics = eval_block.evaluate_model(model, val_loader, device)
             print(f"Validation Metrics: {metrics}")
+            if metrics and "pq" in metrics:
+                pq_value = float(metrics["pq"].detach().cpu())
+                if pq_value > best_pq:
+                    best_pq = pq_value
+                    torch.save(base_model.state_dict(), best_path)
+                    print(f"Saved best model to: {best_path} (pq={best_pq:.4f})")
 
-    torch.save(base_model.state_dict(), args.save_path)
-    print(f"Model saved to: {args.save_path}")
+    torch.save(base_model.state_dict(), last_path)
+    print(f"Model saved to: {last_path}")
 
 
 if __name__ == "__main__":

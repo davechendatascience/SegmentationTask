@@ -50,7 +50,7 @@ def _make_panoptic_tensor(masks, labels, height, width):
 
 
 @torch.no_grad()
-def evaluate_model(model, dataloader, device, return_debug=False, use_cpu_metric=True):
+def evaluate_model(model, dataloader, device, return_debug=False, use_cpu_metric=False):
     model.eval()
     metric_device = torch.device("cpu") if use_cpu_metric else torch.device(device)
     metric = PanopticQuality(
@@ -73,15 +73,15 @@ def evaluate_model(model, dataloader, device, return_debug=False, use_cpu_metric
         pixel_values = pixel_values.to(device)
 
         outputs = model(pixel_values)
-        outputs_logits = outputs["pred_logits"].detach().cpu()
-        outputs_masks = outputs["pred_masks"].detach().cpu()
+        outputs_logits = outputs["pred_logits"].detach()
+        outputs_masks = outputs["pred_masks"].detach()
         del outputs
 
         preds = []
         targets_pan = []
         for i, t in enumerate(targets):
-            tgt_masks = t["masks"]
-            tgt_labels = t["class_labels"]
+            tgt_masks = t["masks"].to(device)
+            tgt_labels = t["class_labels"].to(device)
             target_h, target_w = tgt_masks.shape[-2:]
 
             logits = outputs_logits[i]
