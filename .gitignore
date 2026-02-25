@@ -1,4 +1,22 @@
-__pycache__
-ADEChallengeData2016/
-ADEChallengeData2016.zip
+# Exclude data and outputs
+data/omni_data/
+output/
 runs/
+wandb/
+*.pt
+*.pth
+*.ckpt
+__pycache__/
+*.pyc
+
+# Exclude original datasets if inside repo
+data/drawer_v2.v1i.coco-segmentation/
+data/coco/
+ADEChallengeData2016/
+
+# System
+.DS_Store
+.idea/
+.vscode/
+hf_cache/
+.venv
