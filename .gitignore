@@ -9,6 +9,9 @@ wandb/
 __pycache__/
 *.pyc
 
+# Credentials
+roboflow_credentials.json
+
 # Exclude original datasets if inside repo
 data/drawer_v2.v1i.coco-segmentation/
 data/coco/
