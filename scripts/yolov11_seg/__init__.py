@@ -1,0 +1,1 @@
+"""YOLOv11 Hospital Segmentation module with Roboflow integration."""
