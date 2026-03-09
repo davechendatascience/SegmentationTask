@@ -214,7 +214,7 @@ def train(data_cfg=None, model_cfg=None, train_cfg=None, aug_cfg=None, resume=No
     model = SAM3SegModel.build(
         model_name=model_cfg.sam3_model_name,
         checkpoint_path=model_cfg.sam3_checkpoint,
-        config_path=model_cfg.sam3_config,
+        config_path=model_cfg.sam3_config_path,
         num_classes=num_classes,
         use_adapters=model_cfg.use_adapters,
         adapter_dim=model_cfg.adapter_dim,
