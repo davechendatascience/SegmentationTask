@@ -3,7 +3,7 @@
 FROM nvcr.io/nvidia/pytorch:25.11-py3
 
 LABEL maintainer="segmentation-pipeline"
-LABEL description="Mask2Former + SAM2-UNet hospital segmentation pipeline (DGX Spark)"
+LABEL description="Mask2Former + SAM2/SAM3 + YOLOv11 hospital segmentation pipeline (DGX Spark)"
 
 # System dependencies (Ubuntu 24.04 inside nvcr pytorch image)
 RUN apt-get update && apt-get install -y \
@@ -55,7 +55,7 @@ RUN touch /workspace/scripts/__init__.py 2>/dev/null || true
 ENV HF_HOME=/workspace/.cache/huggingface
 ENV TRANSFORMERS_CACHE=/workspace/.cache/huggingface/transformers
 
-# Default: show help
-CMD ["echo", "Use: python -m scripts.mask2former_seg.train OR python -m scripts.sam2_seg.train"]
+# Default: keep an interactive shell available instead of exiting immediately
+CMD ["/bin/bash"]
 
 
