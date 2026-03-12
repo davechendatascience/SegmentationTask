@@ -118,6 +118,32 @@ docker exec seg_pipeline python -m scripts.yolov11_seg.train --workers 0
 
 The project default for YOLOv11 is now `workers=0` in Docker-safe mode.
 
+## Quick Start (Colab)
+
+For YOLOv11 on Google Colab you do not need Docker. Use a normal Python runtime with GPU:
+
+```bash
+git clone <your-repo-url>
+cd SegmentationTask
+pip install -r scripts/yolov11_seg/requirements.txt
+python -m scripts.mask2former_seg.download_dataset \
+    --output_dir /content/data/hospital_coco \
+    --credentials /content/roboflow_credentials.json
+python -m scripts.yolov11_seg.train \
+    --data-root /content/data/hospital_coco \
+    --workers 2
+```
+
+If you prefer Colab secrets or environment variables instead of a JSON file:
+
+```bash
+export ROBOFLOW_API_KEY=...
+export ROBOFLOW_WORKSPACE=...
+export ROBOFLOW_PROJECT=...
+export ROBOFLOW_VERSION=1
+python -m scripts.mask2former_seg.download_dataset --output_dir /content/data/hospital_coco
+```
+
 ### 3. Run a pipeline
 
 ```bash
@@ -294,10 +320,11 @@ data/hospital_coco/
 To re-download:
 
 ```bash
-docker exec seg_pipeline python -m scripts.mask2former_seg.download_dataset
+python -m scripts.mask2former_seg.download_dataset
 ```
 
-Requires `roboflow_credentials.json` in the project root.
+Supports either `roboflow_credentials.json` in the project root, `--credentials <path>`,
+or `ROBOFLOW_*` environment variables.
 
 ---
 

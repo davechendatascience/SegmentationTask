@@ -12,6 +12,33 @@ pip install -r requirements.txt
 
 2. Prepare the shared COCO dataset used by Mask2Former under `data/hospital_coco`.
 
+### Colab
+
+If you want to run this on Google Colab instead of Docker, the simplest flow is:
+
+```bash
+git clone <your-repo-url>
+cd SegmentationTask
+pip install -r scripts/yolov11_seg/requirements.txt
+python -m scripts.mask2former_seg.download_dataset \
+  --output_dir /content/data/hospital_coco \
+  --credentials /content/roboflow_credentials.json
+python -m scripts.yolov11_seg.train \
+  --data-root /content/data/hospital_coco \
+  --workers 2
+```
+
+You can also skip the credentials JSON and pass Roboflow values directly:
+
+```bash
+python -m scripts.mask2former_seg.download_dataset \
+  --output_dir /content/data/hospital_coco \
+  --api-key "$ROBOFLOW_API_KEY" \
+  --workspace "<workspace>" \
+  --project "<project>" \
+  --version "<version>"
+```
+
 ## Configuration
 
 Edit `config.py` to set:
@@ -30,6 +57,8 @@ python -m scripts.yolov11_seg.train
 ```bash
 python -m scripts.yolov11_seg.train --data-root path/to/hospital_coco
 ```
+
+For Colab, a typical path is `/content/data/hospital_coco`.
 
 ### Fine-tune from pretrained YOLOv11 segmentation weights
 ```python
@@ -57,5 +86,5 @@ python -m scripts.yolov11_seg.visualize --model output/yolov11/exp/weights/best.
 ## Notes
 
 - YOLOv11 uses YOLOv8 format for segmentation
-- Make sure your Roboflow dataset is exported in YOLOv8 format
-- Adjust class names in `dataset.py` based on your dataset
+- This repo converts the Roboflow COCO export into YOLO labels automatically
+- In Colab, increase `--workers` from `0` if the runtime is stable enough
