@@ -1,5 +1,8 @@
 # YOLOv11 Detection Training
 
+這個模組是比照 `scripts/yolov11_seg` 建立的 object detection 版本，
+專門使用 `scripts/object_detection_to_image_segmentaion` 原本那份 Roboflow COCO detection 資料集。
+
 預設資料根目錄：
 
 ```text
@@ -34,43 +37,139 @@ pip install ultralytics
 python -m scripts.yolov11_detection.prepare_dataset
 ```
 
-若原始 detection 資料集不在 `data/hiod_coco`：
+如果你的原始 detection 資料集不在 `data/hiod_coco`：
 
 ```bash
+python -m scripts.object_detection_to_image_segmentaion.download_roboflow_coco ^
+  --dataset-url https://universe.roboflow.com/{workspace}/{project}/dataset/ ^
+  --version {version} ^
+  --api-key {api_key} ^
+  --output-dir /path/to/hiod_coco
+
 python -m scripts.yolov11_detection.prepare_dataset --data-root path/to/hiod_coco
 ```
 
+這一步主要是把原始 COCO detection 資料：
+
+- `train/_annotations.coco.json`
+- `valid/_annotations.coco.json`
+- `test/_annotations.coco.json`
+
+轉成 YOLO 可以直接訓練的：
+
+- `images/*.jpg`
+- `labels/*.txt`
+- `data.yaml`
+
 ## 2. 訓練
+
+最基本的訓練方式：
 
 ```bash
 python -m scripts.yolov11_detection.train
 ```
 
-或指定模型尺寸：
+指定模型尺寸：
 
 ```bash
 python -m scripts.yolov11_detection.train --model yolo11s.pt --epochs 100 --batch-size 16
 ```
 
-想把 data augmentation 參數改成從 CLI 傳入，可以採用這種 args 風格：
+### `train.py` 目前支援的常用 CLI 參數
+
+- `--data-yaml`
+  預設：`None`
+  不指定時，程式會依 `--data-root` 或 `config.py` 自動建立 / 使用 YOLO `data.yaml`
+- `--data-root`
+  預設：`None`
+  不指定時，會回退到 `config.py` 內的 `data/hiod_coco`
+- `--model`
+  預設：`None`
+  不指定時，會回退到 `config.py` 內的 `yolo11n.pt`
+- `--epochs`
+  預設：`None`
+  不指定時，會回退到 `config.py` 內的 `100`
+- `--batch-size`
+  預設：`None`
+  不指定時，會回退到 `config.py` 內的 `16`
+- `--workers`
+  預設：`None`
+  不指定時，會回退到 `config.py` 內的 `0`
+- `--from-scratch`
+  預設：關閉
+  不加這個參數時，預設會從 pretrained 權重開始 fine-tune
+
+### 常見參數調整範例
+
+使用較大的模型：
 
 ```bash
 python -m scripts.yolov11_detection.train ^
-  --model yolo11s.pt ^
+  --model yolo11s.pt
+```
+
+增加訓練回合：
+
+```bash
+python -m scripts.yolov11_detection.train ^
+  --epochs 150
+```
+
+修改 batch size：
+
+```bash
+python -m scripts.yolov11_detection.train ^
+  --batch-size 8
+```
+
+提高 dataloader workers：
+
+```bash
+python -m scripts.yolov11_detection.train ^
+  --workers 4
+```
+
+指定自己的資料根目錄：
+
+```bash
+python -m scripts.yolov11_detection.train ^
+  --data-root path/to/hiod_coco
+```
+
+直接指定已存在的 `data.yaml`：
+
+```bash
+python -m scripts.yolov11_detection.train ^
+  --data-yaml data/hiod_coco/yolo_detection/data.yaml
+```
+
+從 scratch 訓練：
+
+```bash
+python -m scripts.yolov11_detection.train ^
+  --from-scratch
+```
+
+### Data Augmentation 參數範例
+
+如果之後你想把 data augmentation 參數改成從 CLI 傳入，可以採用這種 args 風格：
+
+```bash
+python -m scripts.yolov11_detection.train ^
   --epochs 100 ^
   --batch-size 16 ^
   --hsv-h 0.015 ^
-  --hsv-s 0.7 ^
-  --hsv-v 0.4 ^
-  --degrees 5 ^
+  --hsv-s 0.3 ^
+  --hsv-v 0.15 ^
+  --degrees 15 ^
   --translate 0.1 ^
-  --scale 0.5 ^
-  --shear 2 ^
+  --scale 0.25 ^
+  --shear 10 ^
   --perspective 0.0 ^
   --flipud 0.1 ^
   --fliplr 0.5 ^
-  --mosaic 0.8 ^
-  --mixup 0.1
+  --mosaic 0.5 ^
+  --mixup 0.05
 ```
 
 目前 `scripts.yolov11_detection.train` 還沒有實作這批 augmentation CLI 參數；
@@ -79,22 +178,25 @@ python -m scripts.yolov11_detection.train ^
 ## 3. 評估
 
 ```bash
-python -m scripts.yolov11_detection.evaluate \
-  --model output/yolov11_detection/exp/weights/best.pt \
+python -m scripts.yolov11_detection.evaluate ^
+  --model output/yolov11_detection/exp/weights/best.pt ^
   --data data/hiod_coco/yolo_detection/data.yaml
 ```
 
 ## 4. 視覺化
-想查看result
+
+### 視覺化 prediction result
+
 ```bash
-python -m scripts.yolov11_detection.visualize \
-  --model output/yolov11_detection/exp/weights/best.pt \
-  --source data/hiod_coco/test \
-  --max-images 10 \
+python -m scripts.yolov11_detection.visualize ^
+  --model output/yolov11_detection/exp/weights/best.pt ^
+  --source data/hiod_coco/test ^
+  --max-images 10 ^
   --save
 ```
 
-想查看ground truth
+### 視覺化 ground truth
+
 ```bash
 python -m scripts.yolov11_detection.visualize ^
   --ground-truth ^
@@ -104,11 +206,21 @@ python -m scripts.yolov11_detection.visualize ^
   --save
 ```
 
+## Resize 說明
+
+在你目前這套 `yolov11_detection` 流程裡：
+
+- `train` 時，Ultralytics 會自動 resize / letterbox 影像，並同步處理 bbox
+- `val/test` 時，也會自動做相同類型的尺寸調整
+- 所以你不需要自己手動修改原始 annotation
+
+只有在你「先離線把原始圖片改尺寸並存成新資料集」的情況下，才需要同步改 annotation。
+
 ## 檔案說明
 
 - `config.py`: 預設資料路徑、YOLOv11 model、訓練參數
 - `dataset.py`: COCO detection -> YOLO detection labels 轉換
 - `prepare_dataset.py`: 只做資料準備
 - `train.py`: 訓練 YOLOv11 detection
-- `evaluate.py`: 驗證 box mAP
-- `visualize.py`: 預測視覺化
+- `evaluate.py`: 評估 box mAP
+- `visualize.py`: prediction / ground-truth 視覺化
