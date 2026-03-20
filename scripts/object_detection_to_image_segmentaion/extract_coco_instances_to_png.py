@@ -16,10 +16,9 @@ Output layout:
 
 Example:
     python -m scripts.object_detection_to_image_segmentaion.extract_coco_instances_to_png \
-    --input-root data/hiod_coco \
-    --output-root output/hiod_instances_png \
-    --splits train
-    --padding 8
+      --input-root data/hiod_sam2_seg \
+      --output-root output/hiod_instances_png \
+      --padding 8
 """
 
 from __future__ import annotations
@@ -40,13 +39,13 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 
 
 def load_coco(ann_path: Path) -> dict:
-    # 讀取 COCO annotation JSON。
+    # 讀取單一 COCO annotation json 檔。
     with ann_path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def anns_by_image_id(annotations: Iterable[dict]) -> Dict[int, List[dict]]:
-    # 把 annotations 依 image_id 分組，後續處理單張影像時比較快查。
+    # 依 image_id 將 annotation 分組，後續可快速取得同一張圖的所有 instance。
     grouped: Dict[int, List[dict]] = {}
     for ann in annotations:
         grouped.setdefault(int(ann["image_id"]), []).append(ann)
@@ -54,7 +53,8 @@ def anns_by_image_id(annotations: Iterable[dict]) -> Dict[int, List[dict]]:
 
 
 def resolve_image_path(split_dir: Path, file_name: str) -> Path:
-    # 優先使用 annotation 內的原始 file_name，找不到時再退回只比對檔名或副檔名。
+    # 優先使用 COCO file_name 完整路徑；若資料夾層級不同，再退回純檔名比對。
+    # 這裡刻意不再用 stem 猜檔名，避免拿到錯圖造成 mask 對位錯誤。
     direct = split_dir / file_name
     if direct.exists():
         return direct
@@ -63,23 +63,17 @@ def resolve_image_path(split_dir: Path, file_name: str) -> Path:
     if by_name.exists():
         return by_name
 
-    stem = Path(file_name).stem
-    for ext in IMAGE_EXTENSIONS:
-        candidate = split_dir / f"{stem}{ext}"
-        if candidate.exists():
-            return candidate
-
     raise FileNotFoundError(f"Image not found under {split_dir}: {file_name}")
 
 
 def segmentation_to_binary_mask(segmentation, height: int, width: int) -> np.ndarray:
-    # COCO segmentation 可能是 polygon list 或 RLE dict，這裡統一轉成 (H, W) binary mask。
-    if isinstance(segmentation, list): #polygon list
+    # COCO segmentation 可能是 polygon list 或 RLE dict，統一轉成 (H, W) binary mask。
+    if isinstance(segmentation, list):
         if not segmentation:
             return np.zeros((height, width), dtype=np.uint8)
         rles = coco_mask.frPyObjects(segmentation, height, width)
         rle = coco_mask.merge(rles)
-    elif isinstance(segmentation, dict): #RLE dict
+    elif isinstance(segmentation, dict):
         rle = segmentation
     else:
         return np.zeros((height, width), dtype=np.uint8)
@@ -91,7 +85,7 @@ def segmentation_to_binary_mask(segmentation, height: int, width: int) -> np.nda
 
 
 def mask_to_xyxy(mask: np.ndarray) -> tuple[int, int, int, int] | None:
-    # 從 binary mask 取出最小外接框，供後續裁切 instance 使用。
+    # 由 binary mask 計算前景最小外接框，供裁切 instance 使用。
     ys, xs = np.where(mask > 0)
     if len(xs) == 0 or len(ys) == 0:
         return None
@@ -99,7 +93,7 @@ def mask_to_xyxy(mask: np.ndarray) -> tuple[int, int, int, int] | None:
 
 
 def expand_xyxy(box: tuple[int, int, int, int], width: int, height: int, padding: int) -> tuple[int, int, int, int]:
-    # 在 instance 外接框周圍補一些 padding，避免裁切太緊。
+    # 在外接框周圍額外補 padding，避免裁切時貼得太緊。
     x1, y1, x2, y2 = box
     return (
         max(0, x1 - padding),
@@ -110,13 +104,13 @@ def expand_xyxy(box: tuple[int, int, int, int], width: int, height: int, padding
 
 
 def slugify(value: str) -> str:
-    # 把類別名或檔名整理成安全的輸出路徑字串。
+    # 將類別名稱或檔名整理成適合當檔案路徑的字串。
     slug = re.sub(r"[^A-Za-z0-9._-]+", "_", value.strip())
     return slug.strip("._") or "unknown"
 
 
 def build_rgba_crop(image_rgb: np.ndarray, mask: np.ndarray, crop_box: tuple[int, int, int, int]) -> Image.Image:
-    # 將裁切區域組成 RGBA 影像，alpha 直接使用 instance mask，達成去背效果。
+    # 建立 RGBA 影像，alpha 通道直接使用 instance mask，達成去背效果。
     x1, y1, x2, y2 = crop_box
     rgb_crop = image_rgb[y1:y2, x1:x2]
     alpha_crop = (mask[y1:y2, x1:x2] > 0).astype(np.uint8) * 255
@@ -133,7 +127,7 @@ def extract_split(
     save_full_mask: bool,
     manifest_rows: list[dict],
 ) -> None:
-    # 逐個 split 處理 COCO segmentation dataset，輸出每個 instance 的透明 PNG。
+    # 處理單一 split，將每個 instance 匯出成透明背景 PNG。
     split_dir = input_root / split
     ann_path = split_dir / "_annotations.coco.json"
     if not ann_path.exists():
@@ -149,20 +143,38 @@ def extract_split(
     skipped_count = 0
 
     for image_id, image_info in tqdm(images_by_id.items(), desc=f"Extracting [{split}]"):
-        # 先讀原圖，這樣同一張圖底下的多個 instance 可以重複使用同一份像素資料。
+        # 先讀取原圖，讓同一張圖底下的多個 instance 共用同一份像素資料。
         image_path = resolve_image_path(split_dir, image_info["file_name"])
         image_rgb = np.array(Image.open(image_path).convert("RGB"))
-        height, width = image_rgb.shape[:2]
+        actual_height, actual_width = image_rgb.shape[:2]
+
+        expected_height = int(image_info.get("height", actual_height))
+        expected_width = int(image_info.get("width", actual_width))
+        # 若 annotation 記錄的尺寸與實際圖片尺寸不同，mask 很容易整體偏移，這裡直接跳過。
+        if actual_height != expected_height or actual_width != expected_width:
+            print(
+                "Warning: image size mismatch for "
+                f"{image_info['file_name']}. "
+                f"annotation=({expected_width}, {expected_height}) "
+                f"actual=({actual_width}, {actual_height}). Skipping this image."
+            )
+            skipped_count += len(grouped_annotations.get(image_id, []))
+            continue
 
         for ann in grouped_annotations.get(image_id, []):
-            # crowd annotation 不適合做單一 instance 匯出，直接略過。
+            # crowd 標註通常不是單一乾淨 instance，不適合直接輸出成單張 PNG。
             if ann.get("iscrowd", 0):
                 skipped_count += 1
                 continue
 
-            mask = segmentation_to_binary_mask(ann.get("segmentation"), height=height, width=width)
+            # 依 annotation 內的 segmentation 還原出該 instance 的 binary mask。
+            mask = segmentation_to_binary_mask(
+                ann.get("segmentation"),
+                height=expected_height,
+                width=expected_width,
+            )
             mask_area = int(mask.sum())
-            # 太小的 mask 通常噪聲較多，直接略過避免輸出品質太差。
+            # 太小的 mask 可能只是噪聲或幾乎看不見，依設定直接略過。
             if mask_area < min_mask_area:
                 skipped_count += 1
                 continue
@@ -172,7 +184,7 @@ def extract_split(
                 skipped_count += 1
                 continue
 
-            crop_box = expand_xyxy(box, width=width, height=height, padding=padding)
+            crop_box = expand_xyxy(box, width=actual_width, height=actual_height, padding=padding)
             rgba_image = build_rgba_crop(image_rgb=image_rgb, mask=mask, crop_box=crop_box)
 
             category = categories_by_id.get(int(ann["category_id"]), {})
@@ -181,20 +193,20 @@ def extract_split(
             out_dir = output_root / split / category_name
             out_dir.mkdir(parents=True, exist_ok=True)
 
-            # 檔名保留原圖 stem、annotation id、category id，方便回查來源。
+            # 檔名保留原圖 stem、annotation id、category id，方便後續回查來源。
             file_stem = f"{image_stem}__ann{ann['id']}__cat{ann['category_id']}"
             png_path = out_dir / f"{file_stem}.png"
             rgba_image.save(png_path)
 
             mask_path = None
             if save_full_mask:
-                # 視需要另外輸出完整尺寸的 binary mask，方便除錯或後續流程使用。
+                # 視需要一併輸出完整尺寸的 binary mask，方便除錯或後處理。
                 mask_dir = output_root / split / "_masks"
                 mask_dir.mkdir(parents=True, exist_ok=True)
                 mask_path = mask_dir / f"{file_stem}.png"
                 Image.fromarray((mask * 255).astype(np.uint8), mode="L").save(mask_path)
 
-            # manifest 記錄輸出 PNG 與原始 annotation 的對應資訊。
+            # manifest 記錄每張輸出 PNG 與原始 annotation、圖片的對應資訊。
             manifest_rows.append(
                 {
                     "split": split,
@@ -218,19 +230,19 @@ def extract_split(
 
 
 def parse_args() -> argparse.Namespace:
-    # CLI 參數集中在這裡，方便後續獨立當工具腳本使用。
+    # CLI 參數入口，方便將此腳本獨立當工具使用。
     parser = argparse.ArgumentParser(description="Extract per-instance transparent PNGs from a COCO segmentation dataset")
     parser.add_argument("--input-root", required=True, help="COCO segmentation dataset root")
     parser.add_argument("--output-root", default="output/instance_pngs", help="Directory to save instance PNGs")
     parser.add_argument("--splits", nargs="+", default=["train", "valid", "test"])
     parser.add_argument("--padding", type=int, default=0, help="Extra pixel padding around each instance crop")
-    parser.add_argument("--min-mask-area", type=int, default=0, help="Skip instances smaller than this mask area")
+    parser.add_argument("--min-mask-area", type=int, default=16, help="Skip instances smaller than this mask area")
     parser.add_argument("--save-full-mask", action="store_true", help="Also save one full-size binary mask PNG per instance")
     return parser.parse_args()
 
 
 def main() -> None:
-    # 主流程：逐個 split 輸出 instance PNG，最後產出一份 manifest.jsonl。
+    # 主流程：逐個 split 匯出 instance PNG，最後再寫出 manifest.jsonl。
     args = parse_args()
 
     input_root = Path(args.input_root)

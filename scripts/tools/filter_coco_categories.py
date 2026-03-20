@@ -10,7 +10,8 @@ Example:
       --input-root data/medbin_dataset \
       --output-root data/medbin_dataset_filtered \
       --remove-category-ids 998 999 \
-      --drop-empty-images
+      --drop-empty-images \
+      --drop-unused-categories
 """
 
 from __future__ import annotations
@@ -86,6 +87,7 @@ def filter_split(
     output_root: Path,
     remove_category_ids: set[int],
     drop_empty_images: bool,
+    drop_unused_categories: bool,
     force_copy_images: bool,
 ) -> None:
     # Filter one split and write the result as a new COCO dataset split.
@@ -125,6 +127,16 @@ def filter_split(
         ann for ann in kept_annotations
         if int(ann["image_id"]) in kept_image_ids
     ]
+
+    if drop_unused_categories:
+        used_category_ids = {
+            int(ann["category_id"])
+            for ann in kept_annotations
+        }
+        kept_categories = [
+            cat for cat in kept_categories
+            if int(cat.get("id", -1)) in used_category_ids
+        ]
 
     out_split_dir = output_root / split
     copied_images = 0
@@ -171,6 +183,11 @@ def parse_args() -> argparse.Namespace:
         help="Drop images that have no annotations left after filtering",
     )
     parser.add_argument(
+        "--drop-unused-categories",
+        action="store_true",
+        help="Also remove categories that are no longer referenced by any annotation",
+    )
+    parser.add_argument(
         "--copy-images",
         action="store_true",
         help="Copy files instead of hard-linking them into the output dataset",
@@ -194,6 +211,7 @@ def main() -> None:
             output_root=output_root,
             remove_category_ids=remove_category_ids,
             drop_empty_images=args.drop_empty_images,
+            drop_unused_categories=args.drop_unused_categories,
             force_copy_images=args.copy_images,
         )
 
