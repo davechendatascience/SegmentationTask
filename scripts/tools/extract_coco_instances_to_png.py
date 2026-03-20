@@ -1,6 +1,9 @@
 """
 Extract per-instance transparent PNGs from a COCO instance segmentation dataset.
 
+This file is designed to be standalone so it can be shared from scripts/tools
+without depending on the original pipeline package layout.
+
 Input layout:
     input_root/
       train/_annotations.coco.json
@@ -15,7 +18,7 @@ Output layout:
       manifest.jsonl
 
 Example:
-    python -m scripts.object_detection_to_image_segmentaion.extract_coco_instances_to_png \
+    python -m scripts.tools.extract_coco_instances_to_png \
       --input-root data/hiod_sam2_seg \
       --output-root output/hiod_instances_png \
       --padding 8

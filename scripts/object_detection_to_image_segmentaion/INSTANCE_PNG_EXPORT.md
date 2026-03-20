@@ -28,7 +28,7 @@ python -m scripts.object_detection_to_image_segmentaion.convert_coco_detection_t
 ### 3. Export each segmentation instance to transparent PNG
 
 ```bash
-python -m scripts.object_detection_to_image_segmentaion.extract_coco_instances_to_png \
+python -m scripts.tools.extract_coco_instances_to_png \
   --input-root data/hiod_sam2_seg \
   --output-root output/hiod_instances_png \
   --padding 8
