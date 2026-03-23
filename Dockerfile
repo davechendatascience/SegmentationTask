@@ -52,4 +52,3 @@ ENV TRANSFORMERS_CACHE=/workspace/.cache/huggingface/transformers
 
 # Default: show help
 CMD ["echo", "Use: python -m scripts.mask2former_seg.train OR python -m scripts.sam2_seg.train"]
-

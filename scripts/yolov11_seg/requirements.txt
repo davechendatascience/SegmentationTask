@@ -1,0 +1,9 @@
+# Requirements for YOLOv11 segmentation training
+ultralytics>=8.0.0
+roboflow>=1.1.0
+torch>=2.0.0
+torchvision>=0.15.0
+numpy>=1.21.0
+opencv-python>=4.5.0
+Pillow>=8.0.0
+tqdm>=4.62.0
