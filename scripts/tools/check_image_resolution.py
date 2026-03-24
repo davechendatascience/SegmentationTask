@@ -32,6 +32,8 @@ from PIL import Image
 def main() -> None:
     parser = argparse.ArgumentParser(description="Check the resolution of images in folder")
     parser.add_argument("--input-dir", required=True, help="Image input folder path")
+    parser.add_argument("--first", required=True, help="Image input folder path")
+    parser.add_argument("--second", required=True, help="Image input folder path")
     args = parser.parse_args()
     root = Path(args.input_dir)  
     exts = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
@@ -46,17 +48,17 @@ def main() -> None:
         try:
             with Image.open(path) as img:
                 w, h = img.size
-            if w >= 1920 and h >= 1080:
+            if w >= args.first and h >= args.second:
                 hi += 1
-            elif h >= 1920 and w >= 1080:
+            elif h >= args.first and w >=  args.second:
                 hi += 1
             else:
                 lo += 1
         except Exception as e:
             bad.append((str(path), str(e)))
 
-    print(f">=1920x1080: {hi}")
-    print(f"<1920x1080: {lo}")
+    print(f">={args.first}x{args.second}: {hi}")
+    print(f"<{args.first}x{args.second}: {lo}")
     print(f"Unreadable: {len(bad)}")
 
 if __name__ == "__main__":
