@@ -13,7 +13,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate YOLOv11 object detection model")
     parser.add_argument("--model", type=str, required=True, help="Path to trained model weights")
     parser.add_argument("--data", type=str, required=True, help="Path to data.yaml")
-    parser.add_argument("--split", type=str, default="val", help="Dataset split to evaluate on")
+    parser.add_argument("--split", type=str, default="test", help="Dataset split to evaluate on")
     parser.add_argument("--batch-size", type=int, default=16, help="Batch size for evaluation")
     parser.add_argument("--device", type=str, default="cuda", help="Device to run evaluation on")
     args = parser.parse_args()
