@@ -92,6 +92,37 @@ def resolve_category_mapping(coco_data: dict, model: YOLO) -> dict[int, int]:
     return idx_to_cat_id
 
 
+def print_object_size_distribution(coco_data: dict) -> None:
+    small = 0
+    medium = 0
+    large = 0
+
+    for ann in coco_data.get("annotations", []):
+        if "area" in ann:
+            area = float(ann["area"])
+        else:
+            bbox = ann.get("bbox")
+            if not bbox or len(bbox) < 4:
+                continue
+            area = float(bbox[2]) * float(bbox[3])
+
+        if area < 32 * 32:
+            small += 1
+        elif area < 96 * 96:
+            medium += 1
+        else:
+            large += 1
+
+    total = small + medium + large
+    print("\n=== Object Size Distribution ===")
+    if total == 0:
+        print("No annotations found in the resolved COCO file.")
+        return
+    print(f"small : {small} ({small / total:.2%})")
+    print(f"medium: {medium} ({medium / total:.2%})")
+    print(f"large : {large} ({large / total:.2%})")
+
+
 def evaluate_segmentation(args: argparse.Namespace) -> dict[str, float] | None:
     input_root = Path(args.input_root)
     ann_path = input_root / args.split / "_annotations.coco.json"
@@ -99,6 +130,8 @@ def evaluate_segmentation(args: argparse.Namespace) -> dict[str, float] | None:
         raise FileNotFoundError(f"Annotation not found: {ann_path}")
 
     coco_data = load_coco(ann_path)
+    if args.show_size_distribution:
+        print_object_size_distribution(coco_data)
     images = coco_data.get("images", [])
     if args.max_images is not None:
         images = images[: args.max_images]
@@ -267,6 +300,21 @@ def evaluate_segmentation(args: argparse.Namespace) -> dict[str, float] | None:
     coco_eval.accumulate()
     coco_eval.summarize()
 
+    # index	指標	說明
+    # 0	AP@[0.50:0.95]	主指標（mAP）
+    # 1	AP@0.50	寬鬆 IoU
+    # 2	AP@0.75	嚴格 IoU
+    # 3	AP small	小物件
+    # 4	AP medium	中物件
+    # 5	AP large	大物件
+    # 6	AR@1	每張最多1個
+    # 7	AR@10	每張最多10個
+    # 8	AR@100	recall
+    # 9	AR small	小物件
+    # 10	AR medium	中物件
+    # 11	AR large	大物件
+
+
     metrics = {
         "mAP50_95": float(coco_eval.stats[0]),
         "mAP50": float(coco_eval.stats[1]),
@@ -303,6 +351,7 @@ def main() -> None:
     parser.add_argument("--max-images", type=int, default=None, help="Useful for smoke tests")
     parser.add_argument("--single-mask", action="store_true", help="Disable SAM2 multimask output")
     parser.add_argument("--pred-json-out", default=None, help="Optional path to save per-instance prediction JSON")
+    parser.add_argument("--show-size-distribution", action="store_true", help="Print COCO small/medium/large object counts before evaluation")
     args = parser.parse_args()
 
     try:
