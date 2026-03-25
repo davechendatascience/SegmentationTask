@@ -26,7 +26,6 @@ from pycocotools.cocoeval import COCOeval
 from tqdm import tqdm
 from ultralytics import YOLO
 
-from .config import DataConfig
 from scripts.object_detection_to_image_segmentaion.convert_coco_detection_to_segmentation import (
     SAM2BoxSegmenter,
     build_segmentation,
@@ -283,7 +282,6 @@ def evaluate_segmentation(args: argparse.Namespace) -> dict[str, float] | None:
 
 
 def main() -> None:
-    data_cfg = DataConfig()
     parser = argparse.ArgumentParser(
         description="Evaluate YOLOv11 detection predictions as segmentation via SAM2"
     )
@@ -293,7 +291,7 @@ def main() -> None:
     parser.add_argument("--conf", type=float, default=0.25, help="YOLO confidence threshold")
     parser.add_argument("--iou", type=float, default=0.7, help="YOLO NMS IoU threshold")
     parser.add_argument("--max-det", type=int, default=100, help="Maximum detections per image")
-    parser.add_argument("--imgsz", type=int, default=data_cfg.image_size, help="Resize image size used during YOLO inference")
+    parser.add_argument("--imgsz", type=int, required=True, help="Resize image size used during YOLO inference")
     parser.add_argument("--device", default="cuda", help="cuda / cpu")
     parser.add_argument("--sam2-model-id", default="facebook/sam2.1-hiera-large")
     parser.add_argument("--sam2-checkpoint", default=None, help="Optional local SAM2 checkpoint")

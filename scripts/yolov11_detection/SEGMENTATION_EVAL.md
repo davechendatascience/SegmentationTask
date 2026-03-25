@@ -12,7 +12,8 @@ using each predicted bbox as a SAM2 box prompt, then running COCO `segm` evaluat
 python -m scripts.yolov11_detection.evaluate_segmentation \
   --model output/medbin_dataset/yolov11_detection/exp/weights/best.pt \
   --input-root data/medbin_dataset \
-  --split test
+  --split test \
+  --imgsz 640
 ```
 
 ## Optional JSON Export
@@ -22,6 +23,7 @@ python -m scripts.yolov11_detection.evaluate_segmentation \
   --model output/medbin_dataset/yolov11_detection/exp/weights/best.pt \
   --input-root data/medbin_dataset \
   --split test \
+  --imgsz 640 \
   --pred-json-out output/yolov11_detection/segmentation_predictions_test.json
 ```
 

@@ -46,7 +46,8 @@ Step 4.a. 評估訓練完成的模型：
 ```bash
     python -m scripts.yolov11_detection.evaluate \
       --model <MODEL_PATH> \
-      --data <DATA_YAML_PATH>
+      --data <DATA_YAML_PATH> \
+      --imgsz <IMAGE_SIZE>
 ```
 # Step 4.b. (For Segmentation) Combine with SAM2 and evaluate the trained model
 Step 4.b.（用於分割評估）結合 SAM2 來評估已訓練模型
@@ -54,7 +55,8 @@ Step 4.b.（用於分割評估）結合 SAM2 來評估已訓練模型
 python -m scripts.yolov11_detection.evaluate_segmentation \
   --model <MODEL_PATH> \
   --sam2-model-id <SAM2_VERSION> \
-  --input-root <DATASET_ROOT>
+  --input-root <DATASET_ROOT> \
+  --imgsz <IMAGE_SIZE>
 ```
 
 **Optional JSON Export**
@@ -64,6 +66,7 @@ python -m scripts.yolov11_detection.evaluate_segmentation \
   --model <MODEL_PATH> \
   --input-root <DATASET_ROOT> \
   --sam2-model-id <SAM2_VERSION> \
+  --imgsz <IMAGE_SIZE> \
   --pred-json-out <OUTPUT_JSON_PATH>
 ```
 **Example**
@@ -71,7 +74,8 @@ python -m scripts.yolov11_detection.evaluate_segmentation \
 python -m scripts.yolov11_detection.evaluate_segmentation \
   --model output/yolov11_detection/exp/weights/best.pt \
   --input-root data/midbin_dataset \
-  --sam2-model-id facebook/sam2.1-hiera-large 
+  --sam2-model-id facebook/sam2.1-hiera-large \
+  --imgsz 640
 ```
 
 

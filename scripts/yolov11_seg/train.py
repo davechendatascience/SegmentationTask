@@ -43,7 +43,7 @@ def main():
     parser.add_argument("--output-dir", type=str, default=None, help="Directory to save trained model outputs")
     parser.add_argument("--epochs", type=int, default=None, help="Number of epochs (overrides config)")
     parser.add_argument("--batch-size", type=int, default=None, help="Batch size (overrides config)")
-    parser.add_argument("--imgsz", type=int, default=None, help="Input image size for train/val/test resize")
+    parser.add_argument("--imgsz", type=int, required=True, help="Input image size for train/val/test resize")
     parser.add_argument("--workers", type=int, default=None, help="Dataloader workers for Ultralytics; use 0 in Docker if shm is limited")
     parser.add_argument("--hsv-h", type=float, default=None, help="HSV hue augmentation strength")
     parser.add_argument("--hsv-s", type=float, default=None, help="HSV saturation augmentation strength")
@@ -74,8 +74,7 @@ def main():
         model_cfg.epochs = args.epochs
     if args.batch_size:
         model_cfg.batch_size = args.batch_size
-    if args.imgsz is not None:
-        data_cfg.image_size = args.imgsz
+    data_cfg.image_size = args.imgsz
     if args.workers is not None:
         train_cfg.workers = args.workers
     if args.hsv_h is not None:

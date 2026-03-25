@@ -8,11 +8,7 @@ import argparse
 
 from ultralytics import YOLO
 
-from .config import DataConfig
-
-
 def main():
-    data_cfg = DataConfig()
     parser = argparse.ArgumentParser(description="Evaluate YOLOv11 model")
     parser.add_argument("--model", type=str, required=True,
                        help="Path to trained model weights")
@@ -24,7 +20,7 @@ def main():
                        help="Batch size for evaluation")
     parser.add_argument("--device", type=str, default="cuda",
                        help="Device to run evaluation on")
-    parser.add_argument("--imgsz", type=int, default=data_cfg.image_size,
+    parser.add_argument("--imgsz", type=int, required=True,
                        help="Resize image size used during evaluation")
     args = parser.parse_args()
 
