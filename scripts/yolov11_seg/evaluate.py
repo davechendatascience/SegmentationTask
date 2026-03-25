@@ -5,12 +5,14 @@ Usage:
     python -m scripts.yolov11_seg.evaluate --model output/yolov11/exp/weights/best.pt --data data.yaml
 """
 import argparse
-from pathlib import Path
 
 from ultralytics import YOLO
 
+from .config import DataConfig
+
 
 def main():
+    data_cfg = DataConfig()
     parser = argparse.ArgumentParser(description="Evaluate YOLOv11 model")
     parser.add_argument("--model", type=str, required=True,
                        help="Path to trained model weights")
@@ -22,18 +24,21 @@ def main():
                        help="Batch size for evaluation")
     parser.add_argument("--device", type=str, default="cuda",
                        help="Device to run evaluation on")
+    parser.add_argument("--imgsz", type=int, default=data_cfg.image_size,
+                       help="Resize image size used during evaluation")
     args = parser.parse_args()
 
     # Load model
     model = YOLO(args.model)
 
     # Run evaluation
-    print(f"Evaluating model on {args.split} set...")
+    print(f"Evaluating model on {args.split} set with imgsz={args.imgsz}...")
     results = model.val(
         data=args.data,
         split=args.split,
         batch=args.batch_size,
         device=args.device,
+        imgsz=args.imgsz,
         save_json=True,
         save_txt=True,
         save_conf=True,
