@@ -245,7 +245,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-root", default="output/instance_pngs", help="Directory to save instance PNGs")
     parser.add_argument("--splits", nargs="+", default=["train", "valid", "test"])
     parser.add_argument("--padding", type=int, default=0, help="Extra pixel padding around each instance crop")
-    parser.add_argument("--min-mask-area", type=int, default=16, help="Skip instances smaller than this mask area")
+    parser.add_argument("--min-mask-area", type=int, default=0, help="Skip instances smaller than this mask area")
     parser.add_argument("--save-full-mask", action="store_true", help="Also save one full-size binary mask PNG per instance")
     return parser.parse_args()
 
