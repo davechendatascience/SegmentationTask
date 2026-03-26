@@ -30,7 +30,7 @@ def main() -> None:
     args = parser.parse_args()
     root = Path(args.input_root)  
 
-    splits = ["train", "val", "test"]
+    splits = ["train", "valid", "test"]
 
     for split in splits:
         split_dir =  root / split
