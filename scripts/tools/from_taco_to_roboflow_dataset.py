@@ -1,5 +1,29 @@
+"""
+Merge split-specific TACO COCO annotation files into Roboflow-style split folders.
+
+This script scans annotation files such as:
+    annotations_0_train.json
+    annotations_1_train.json
+    annotations_0_val.json
+    annotations_0_test.json
+
+For each split (`train`, `val`, `test`), it:
+1. Creates a split directory under the input root if it does not already exist.
+2. Merges all matching annotation files for that split.
+3. Reassigns image ids and annotation ids to avoid collisions.
+4. Writes the merged COCO annotation file to:
+   <input-root>/<split>/_annotations.coco.json
+
+Example:
+    python -m scripts.tools.from_taco_to_roboflow_dataset \
+      --input-root data/taco_dataset
+"""
+
+import argparse
 import json
 from pathlib import Path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-root", required=True, help="Path to TACO Dataset input root path")
