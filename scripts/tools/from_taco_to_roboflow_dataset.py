@@ -63,7 +63,7 @@ def main() -> None:
                 img["id"] = new_id
 
                 old_filename = img["file_name"] 
-                img["file_name"] = "auto-orient-fixed/"+ old_filename
+                img["file_name"] = "../"+ old_filename
                 merged["images"].append(img)
 
 
