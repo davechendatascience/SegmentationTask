@@ -2,7 +2,17 @@
 Train YOLOv11 object detection using Ultralytics on the original COCO dataset.
 
 Usage:
-    python -m scripts.yolov11_detection.train
+python -m scripts.yolov11_detection.train \
+  --epochs 100 \
+  --data-root data/hiod_coco_tiled \
+  --batch-size 16 \
+  --imgsz 1280 \
+  --output-dir output/hiod_coco_tiled/yolov11_detection \
+  --shear 15 \
+  --degrees 15 \
+  --scale 0.2 \
+  --hsv-v 0.25 \
+  --workers 2
 """
 import argparse
 from pathlib import Path
@@ -14,7 +24,8 @@ from .dataset import build_yolo_dataset_from_coco_detection
 
 
 def resolve_ultralytics_save_args(output_dir: str) -> tuple[str, str]:
-    # Treat output_dir as the final experiment directory instead of a project root.
+    # 將 output_dir 視為最終實驗資料夾，而不是 Ultralytics 的 project root。
+    # Treat output_dir as the final experiment directory instead of an Ultralytics project root.
     resolved_dir = Path(output_dir).resolve()
     return str(resolved_dir.parent), resolved_dir.name
 
@@ -27,7 +38,7 @@ def main() -> None:
     parser.add_argument("--output-dir", type=str, default=None, help="Directory to save trained model outputs")
     parser.add_argument("--epochs", type=int, default=None, help="Number of epochs")
     parser.add_argument("--batch-size", type=int, default=None, help="Batch size")
-    parser.add_argument("--imgsz", type=int, default=None, help="Input image size for train/val/test resize")
+    parser.add_argument("--imgsz", type=int, required=True, help="Input image size for train/val/test resize")
     parser.add_argument("--workers", type=int, default=None, help="Ultralytics dataloader workers")
     parser.add_argument("--hsv-h", type=float, default=None, help="HSV hue augmentation strength")
     parser.add_argument("--hsv-s", type=float, default=None, help="HSV saturation augmentation strength")
@@ -48,6 +59,9 @@ def main() -> None:
     model_cfg = ModelConfig()
     train_cfg = TrainConfig()
 
+    # 用 CLI 參數覆蓋 dataclass 預設值，方便同一支腳本支援不同資料集與訓練設定。
+    # Override dataclass defaults with CLI arguments so the same script can be reused
+    # across different datasets and training settings.
     if args.model:
         model_cfg.model_name = args.model
     if args.output_dir:
@@ -56,8 +70,7 @@ def main() -> None:
         model_cfg.epochs = args.epochs
     if args.batch_size:
         model_cfg.batch_size = args.batch_size
-    if args.imgsz is not None:
-        data_cfg.image_size = args.imgsz
+    data_cfg.image_size = args.imgsz
     if args.workers is not None:
         train_cfg.workers = args.workers
     if args.hsv_h is not None:
@@ -88,6 +101,9 @@ def main() -> None:
         model_cfg.pretrained = False
 
     if args.data_root:
+        # 若改了資料集根目錄，就同步把 YOLO dataset view 與 data.yaml 位置一起改掉。
+        # When the source dataset root changes, also update the derived YOLO dataset
+        # directory and the expected data.yaml path.
         data_cfg.data_root = args.data_root
         data_cfg.yolo_dataset_dir = str(Path(args.data_root) / "yolo_detection")
         data_cfg.data_yaml_path = str(Path(data_cfg.yolo_dataset_dir) / "data.yaml")
@@ -95,9 +111,14 @@ def main() -> None:
     if args.data_yaml:
         data_yaml = args.data_yaml
     else:
+        # 如果沒有直接提供 data.yaml，就先從 COCO detection dataset
+        # 自動建立一份 Ultralytics 可讀的 YOLO dataset view。
+        # If no data.yaml is provided, first build a YOLO dataset view from the
+        # COCO detection dataset so Ultralytics can read it directly.
         data_yaml = build_yolo_dataset_from_coco_detection(
             coco_root=data_cfg.data_root,
             output_root=data_cfg.yolo_dataset_dir,
+            preserve_category_ids=True,
         )
 
     print(f"Using data.yaml: {data_yaml}")
@@ -108,6 +129,9 @@ def main() -> None:
         model = YOLO(model_cfg.scratch_model_cfg)
 
     project_dir, run_name = resolve_ultralytics_save_args(model_cfg.output_dir)
+    # 將 config 內整理好的訓練超參數一次打包成 Ultralytics train() 需要的格式。
+    # Pack the resolved training hyperparameters into the argument structure
+    # expected by Ultralytics train().
     train_args = {
         "data": str(data_yaml),
         "epochs": model_cfg.epochs,
@@ -139,6 +163,10 @@ def main() -> None:
         "split": train_cfg.split,
     }
 
+    # 啟動訓練；Ultralytics 會使用 train split 做學習，
+    # 並依設定的 split=val 在每個 epoch 後做驗證。
+    # Start training; Ultralytics learns from the train split and validates
+    # after each epoch on the configured validation split (split=val).
     print("Starting training...")
     print(f"Model source: {model_cfg.model_name if model_cfg.pretrained else model_cfg.scratch_model_cfg}")
     results = model.train(**train_args)

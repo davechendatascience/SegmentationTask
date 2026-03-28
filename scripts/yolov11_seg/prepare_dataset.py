@@ -33,6 +33,18 @@ def main():
         default="data.yaml",
         help="Filename for the generated YAML manifest",
     )
+    parser.add_argument(
+        "--preserve-category-ids",
+        action="store_true",
+        default=True,
+        help="Use original COCO category ids as YOLO class indices instead of reindexing to 0..N-1 (default: enabled)",
+    )
+    parser.add_argument(
+        "--reindex-category-ids",
+        dest="preserve_category_ids",
+        action="store_false",
+        help="Reindex category ids to contiguous 0..N-1 class indices",
+    )
     args = parser.parse_args()
 
     data_cfg = DataConfig()
@@ -44,6 +56,7 @@ def main():
         coco_root=data_cfg.data_root,
         output_root=output_root,
         output_yaml=args.output_yaml,
+        preserve_category_ids=args.preserve_category_ids,
     )
 
     print(f"Prepared dataset YAML: {yaml_path}")
