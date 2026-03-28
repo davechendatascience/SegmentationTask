@@ -165,7 +165,7 @@ def extract_split(
             continue
 
         for ann in grouped_annotations.get(image_id, []):
-            print(ann.get("image_id"))
+            print(ann.get("id"))
             # crowd 標註通常不是單一乾淨 instance，不適合直接輸出成單張 PNG。
             if ann.get("iscrowd", 0):
                 print(
