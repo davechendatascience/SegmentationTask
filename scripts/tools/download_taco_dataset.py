@@ -34,7 +34,7 @@ DEFAULT_ARCHIVE_URL = (
 DEFAULT_ARCHIVE_NAME = "data/taco_dataset.zip"
 DEFAULT_DATASET_DIR = "data/taco_dataset"
 SPLITS = ("train", "valid", "test")
-ANNOTATION_FILENAME = "_annotations.coco.json"
+ANNOTATION_FILENAMES = ("_annotation.coco.json", "_annotations.coco.json")
 
 
 def parse_args() -> argparse.Namespace:
@@ -86,7 +86,7 @@ def extract_archive(archive_path: Path, output_dir: Path) -> None:
     """解壓縮 zip 壓縮檔到指定資料夾。 Extract a zip archive into the target directory."""
     output_dir.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(archive_path, "r") as zf:
-        zf.extractall(output_dir.parent)
+        zf.extractall(output_dir)
 
 
 def prepare_default_dataset(
@@ -105,13 +105,41 @@ def prepare_default_dataset(
         extract_archive(archive_path, dataset_dir)
 
 
+def resolve_dataset_dir(dataset_dir: Path) -> Path:
+    """
+    自動辨識實際資料集根目錄。
+    Resolve the actual dataset root directory automatically.
+
+    支援兩種常見解壓結果：
+    1. data/taco_dataset/train
+    2. data/taco_dataset/taco_dataset/train
+    """
+    direct_split_dirs = [dataset_dir / split for split in SPLITS]
+    if all(path.exists() for path in direct_split_dirs):
+        return dataset_dir
+
+    nested_dir = dataset_dir / dataset_dir.name
+    nested_split_dirs = [nested_dir / split for split in SPLITS]
+    if nested_dir.exists() and all(path.exists() for path in nested_split_dirs):
+        return nested_dir
+
+    return dataset_dir
+
+
 def find_split_annotation_paths(dataset_dir: Path) -> list[Path]:
     """尋找 train/valid/test 的 annotation 檔案。 Find annotation files for train/valid/test."""
     annotation_paths: list[Path] = []
     for split in SPLITS:
         split_dir = dataset_dir / split
-        annotation_path = split_dir / ANNOTATION_FILENAME
-        if not annotation_path.exists():
+        annotation_path = None
+
+        for filename in ANNOTATION_FILENAMES:
+            candidate = split_dir / filename
+            if candidate.exists():
+                annotation_path = candidate
+                break
+
+        if annotation_path is None:
             raise FileNotFoundError(
                 f"Annotation file not found for split '{split}' under {split_dir}"
             )
@@ -131,17 +159,17 @@ def download_and_orient_image(
     response = requests.get(image_url, timeout=timeout)
     response.raise_for_status()
 
-    # 先將下載內容存成暫存檔，再呼叫共用的 auto-orient 工具產生正式輸出。
-    # Save downloaded bytes to a temporary file first, then call the shared
-    # auto-orient helper to produce the final image without EXIF orientation.
-    temp_path = destination_path.with_name(destination_path.name + ".download_tmp")
+    # 保留原始副檔名，讓 PIL 能正確推斷暫存檔格式。
+    # Keep the original image suffix so PIL can infer the temporary file format.
+    suffix = destination_path.suffix or ".jpg"
+    temp_path = destination_path.with_name(
+        f"{destination_path.stem}.download_tmp{suffix}"
+    )
     try:
         img = Image.open(BytesIO(response.content))
         img.save(temp_path)
         auto_orient_and_strip(temp_path, destination_path)
     finally:
-        # 無論成功或失敗都嘗試清理暫存檔。
-        # Always attempt to remove the temporary file.
         if temp_path.exists():
             temp_path.unlink()
 
@@ -210,6 +238,7 @@ def main() -> None:
         dataset_dir=dataset_dir,
         timeout=args.timeout,
     )
+    dataset_dir = resolve_dataset_dir(dataset_dir)
     annotation_paths = find_split_annotation_paths(dataset_dir)
 
     print(
