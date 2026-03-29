@@ -2,16 +2,15 @@
 下載 TACO 的 Flickr 圖片，並在寫入時直接進行 auto-orient。
 Download TACO images from Flickr and auto-orient them during save.
 
+使用方式 Usage:
+    python -m scripts.tools.download_taco_images
+
 預設流程 Default workflow:
 1. 下載釋出的 taco_dataset zip 壓縮檔
-2. 解壓縮到工作目錄
+2. 解壓縮到資料集目錄
 3. 尋找 train/valid/test 的 annotation 檔案
 4. 為各 split 下載缺少的圖片
 5. 呼叫 scripts.tools.auto_orient_tool 套用 auto orientation
-
-
-使用說明 Usage:
-python -m scripts.tools.download_taco_images
 """
 
 from __future__ import annotations
@@ -22,7 +21,6 @@ import sys
 import zipfile
 from io import BytesIO
 from pathlib import Path
-from typing import Iterable
 
 import requests
 from PIL import Image
@@ -33,10 +31,10 @@ DEFAULT_ARCHIVE_URL = (
     "https://github.com/chenp6/SegmentationTask/releases/download/temp_taco/"
     "taco_dataset.zip"
 )
-DEFAULT_ARCHIVE_NAME = "taco_dataset.zip"
-DEFAULT_DATASET_DIR = "taco_dataset"
+DEFAULT_ARCHIVE_NAME = "data/taco_dataset.zip"
+DEFAULT_DATASET_DIR = "data/taco_dataset"
 SPLITS = ("train", "valid", "test")
-ANNOTATION_CANDIDATES = "_annotations.coco.json"
+ANNOTATION_FILENAME = "_annotations.coco.json"
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,39 +46,27 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument(
-        "--dataset-path",
-        nargs="*",
-        default=None,
-        help=(
-            "可選的 annotation json 路徑。若未提供，程式會自動下載並解壓 "
-            "taco_dataset.zip，然後處理 train/valid/test。 "
-            "Optional annotation json paths. If omitted, the script will "
-            "download/extract taco_dataset.zip and process train/valid/test "
-            "automatically."
-        ),
-    )
-    parser.add_argument(
         "--archive-url",
         default=DEFAULT_ARCHIVE_URL,
         help=(
-            "自動模式使用的壓縮檔網址。 "
-            "Release archive URL used in automatic mode."
+            "壓縮檔下載網址。 "
+            "Archive download URL."
         ),
     )
     parser.add_argument(
         "--archive-path",
         default=DEFAULT_ARCHIVE_NAME,
         help=(
-            "自動模式下載壓縮檔時使用的本機路徑。 "
-            "Local path used to store the downloaded archive in automatic mode."
+            "壓縮檔儲存路徑。 "
+            "Local path used to store the downloaded archive."
         ),
     )
     parser.add_argument(
         "--dataset-dir",
         default=DEFAULT_DATASET_DIR,
         help=(
-            "自動模式解壓後使用的資料集目錄。 "
-            "Directory used to extract the dataset in automatic mode."
+            "解壓縮後的資料集目錄。 "
+            "Directory used to extract the dataset."
         ),
     )
     parser.add_argument(
@@ -110,9 +96,9 @@ def download_file(url: str, destination_path: Path, timeout: float) -> None:
 
 def extract_archive(archive_path: Path, output_dir: Path) -> None:
     """解壓縮 zip 壓縮檔。 Extract a zip archive."""
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(archive_path, "r") as zf:
-        zf.extractall(output_dir)
+        zf.extractall(output_dir.parent)
 
 
 def prepare_default_dataset(
@@ -128,7 +114,7 @@ def prepare_default_dataset(
 
     if not dataset_dir.exists():
         print(f"Extracting archive to: {dataset_dir}")
-        extract_archive(archive_path, dataset_dir.parent)
+        extract_archive(archive_path, dataset_dir)
 
 
 def find_split_annotation_paths(dataset_dir: Path) -> list[Path]:
@@ -136,38 +122,14 @@ def find_split_annotation_paths(dataset_dir: Path) -> list[Path]:
     annotation_paths: list[Path] = []
     for split in SPLITS:
         split_dir = dataset_dir / split
-        annotation_path = None
-        # 支援單數與複數兩種常見檔名
-        # Support both singular and plural annotation filenames.
-        candidate_path = split_dir / ANNOTATION_CANDIDATES
-        if candidate_path.exists():
-            annotation_path = candidate_path
-            
-
-        if annotation_path is None:
+        annotation_path = split_dir / ANNOTATION_FILENAME
+        if not annotation_path.exists():
             raise FileNotFoundError(
                 f"Annotation file not found for split '{split}' under {split_dir}"
             )
-
         annotation_paths.append(annotation_path)
 
     return annotation_paths
-
-
-def resolve_annotation_paths(args: argparse.Namespace) -> list[Path]:
-    """決定要處理的 annotation 路徑列表。 Resolve the annotation paths to process."""
-    if args.dataset_path:
-        return [Path(path) for path in args.dataset_path]
-
-    archive_path = Path(args.archive_path)
-    dataset_dir = Path(args.dataset_dir)
-    prepare_default_dataset(
-        archive_url=args.archive_url,
-        archive_path=archive_path,
-        dataset_dir=dataset_dir,
-        timeout=args.timeout,
-    )
-    return find_split_annotation_paths(dataset_dir)
 
 
 def download_and_orient_image(
@@ -251,7 +213,16 @@ def process_annotation_file(dataset_path: Path, timeout: float) -> None:
 def main() -> None:
     """主程式入口。 Program entry point."""
     args = parse_args()
-    annotation_paths = resolve_annotation_paths(args)
+    archive_path = Path(args.archive_path)
+    dataset_dir = Path(args.dataset_dir)
+
+    prepare_default_dataset(
+        archive_url=args.archive_url,
+        archive_path=archive_path,
+        dataset_dir=dataset_dir,
+        timeout=args.timeout,
+    )
+    annotation_paths = find_split_annotation_paths(dataset_dir)
 
     print(
         "Note. If the connection is interrupted, running this command again "
