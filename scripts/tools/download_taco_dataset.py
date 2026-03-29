@@ -1,9 +1,7 @@
 """
 下載 TACO 的 Flickr 圖片，並在寫入時直接進行 auto-orient。
-Download TACO images from Flickr and auto-orient them during save.
-
-使用方式 Usage:
-    python -m scripts.tools.download_taco_images
+Download TACO images from Flickr and auto-orient them during save.使用方式 Usage:
+    python -m scripts.tools.download_taco_dataset
 
 預設流程 Default workflow:
 1. 下載釋出的 taco_dataset zip 壓縮檔
@@ -96,7 +94,7 @@ def download_file(url: str, destination_path: Path, timeout: float) -> None:
 
 def extract_archive(archive_path: Path, output_dir: Path) -> None:
     """解壓縮 zip 壓縮檔。 Extract a zip archive."""
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(archive_path, "r") as zf:
         zf.extractall(output_dir.parent)
 
@@ -223,6 +221,26 @@ def main() -> None:
         timeout=args.timeout,
     )
     annotation_paths = find_split_annotation_paths(dataset_dir)
+            total_count=total_count,
+        )
+
+    sys.stdout.write(f"{dataset_dir.name}: Finished\n")
+
+
+def main() -> None:
+    """主程式入口。 Program entry point."""
+    args = parse_args()
+    annotation_paths = resolve_annotation_paths(args)
+           total_count=total_count,
+        )
+
+    sys.stdout.write(f"{dataset_dir.name}: Finished\n")
+
+
+def main() -> None:
+    """主程式入口。 Program entry point."""
+    args = parse_args()
+    annotation_paths = resolve_annotation_paths(args)
 
     print(
         "Note. If the connection is interrupted, running this command again "
