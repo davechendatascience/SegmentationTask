@@ -8,6 +8,10 @@ Download TACO images from Flickr and auto-orient them during save.
 3. 尋找 train/valid/test 的 annotation 檔案
 4. 為各 split 下載缺少的圖片
 5. 呼叫 scripts.tools.auto_orient_tool 套用 auto orientation
+
+
+使用說明 Usage:
+python -m scripts.tools.download_taco_images
 """
 
 from __future__ import annotations
