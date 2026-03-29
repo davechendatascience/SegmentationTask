@@ -1,6 +1,8 @@
 """
 下載 TACO 的 Flickr 圖片，並在寫入時直接進行 auto-orient。
-Download TACO images from Flickr and auto-orient them during save.使用方式 Usage:
+Download TACO images from Flickr and auto-orient them during save.
+
+使用方式 Usage:
     python -m scripts.tools.download_taco_dataset
 
 預設流程 Default workflow:
@@ -46,35 +48,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--archive-url",
         default=DEFAULT_ARCHIVE_URL,
-        help=(
-            "壓縮檔下載網址。 "
-            "Archive download URL."
-        ),
+        help="壓縮檔下載網址。 Archive download URL.",
     )
     parser.add_argument(
         "--archive-path",
         default=DEFAULT_ARCHIVE_NAME,
-        help=(
-            "壓縮檔儲存路徑。 "
-            "Local path used to store the downloaded archive."
-        ),
+        help="壓縮檔儲存路徑。 Local path used to store the downloaded archive.",
     )
     parser.add_argument(
         "--dataset-dir",
         default=DEFAULT_DATASET_DIR,
-        help=(
-            "解壓縮後的資料集目錄。 "
-            "Directory used to extract the dataset."
-        ),
+        help="解壓縮後的資料集目錄。 Directory used to extract the dataset.",
     )
     parser.add_argument(
         "--timeout",
         type=float,
         default=30.0,
-        help=(
-            "每次 HTTP 請求的逾時秒數。 "
-            "HTTP timeout in seconds for each request."
-        ),
+        help="每次 HTTP 請求的逾時秒數。 HTTP timeout in seconds for each request.",
     )
     return parser.parse_args()
 
@@ -85,7 +75,7 @@ def download_file(url: str, destination_path: Path, timeout: float) -> None:
     with requests.get(url, stream=True, timeout=timeout) as response:
         response.raise_for_status()
         with destination_path.open("wb") as f:
-            # 以串流方式下載大檔，避免一次載入全部內容
+            # 以串流方式下載大檔，避免一次載入全部內容。
             # Stream large files to avoid loading everything into memory at once.
             for chunk in response.iter_content(chunk_size=1024 * 1024):
                 if chunk:
@@ -150,7 +140,7 @@ def download_and_orient_image(
         img.save(temp_path)
         auto_orient_and_strip(temp_path, destination_path)
     finally:
-        # 無論成功或失敗都嘗試清理暫存檔
+        # 無論成功或失敗都嘗試清理暫存檔。
         # Always attempt to remove the temporary file.
         if temp_path.exists():
             temp_path.unlink()
@@ -188,7 +178,7 @@ def process_annotation_file(dataset_path: Path, timeout: float) -> None:
         image_url = image.get("flickr_url") or image.get("flickr_640_url")
         destination_path = dataset_dir / file_name
 
-        # 只有目標圖片不存在時才下載，方便中斷後續跑
+        # 只有目標圖片不存在時才下載，方便中斷後續跑。
         # Only download when the destination image is missing so reruns can resume.
         if not destination_path.exists():
             if not image_url:
@@ -221,26 +211,6 @@ def main() -> None:
         timeout=args.timeout,
     )
     annotation_paths = find_split_annotation_paths(dataset_dir)
-            total_count=total_count,
-        )
-
-    sys.stdout.write(f"{dataset_dir.name}: Finished\n")
-
-
-def main() -> None:
-    """主程式入口。 Program entry point."""
-    args = parse_args()
-    annotation_paths = resolve_annotation_paths(args)
-           total_count=total_count,
-        )
-
-    sys.stdout.write(f"{dataset_dir.name}: Finished\n")
-
-
-def main() -> None:
-    """主程式入口。 Program entry point."""
-    args = parse_args()
-    annotation_paths = resolve_annotation_paths(args)
 
     print(
         "Note. If the connection is interrupted, running this command again "
