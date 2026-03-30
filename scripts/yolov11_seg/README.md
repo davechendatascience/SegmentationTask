@@ -69,7 +69,9 @@ labels from the same COCO annotations used by Mask2Former.
 
 ### 2. Train from the prepared YAML
 ```bash
-python -m scripts.yolov11_seg.train --data-yaml data/hospital_coco/yolo/data.yaml
+python -m scripts.yolov11_seg.train \
+  --data-yaml data/hospital_coco/yolo/data.yaml \
+  --imgsz 640
 ```
 
 ### Save directly into a chosen experiment directory
@@ -77,12 +79,15 @@ python -m scripts.yolov11_seg.train --data-yaml data/hospital_coco/yolo/data.yam
 ```bash
 python -m scripts.yolov11_seg.train \
   --data-yaml data/hospital_coco/yolo/data.yaml \
+  --imgsz 640 \
   --output-dir output/yolov11_seg/exp1
 ```
 
 ### Or still train directly from the shared COCO dataset
 ```bash
-python -m scripts.yolov11_seg.train --data-root path/to/hospital_coco
+python -m scripts.yolov11_seg.train \
+  --data-root path/to/hospital_coco \
+  --imgsz 640
 ```
 
 ### Fine-tune from pretrained YOLOv11 segmentation weights
@@ -98,14 +103,37 @@ model.train(data="data/hospital_coco/yolo/data.yaml", epochs=100, imgsz=640)
 ```bash
 python -m scripts.yolov11_seg.evaluate \
   --model output/yolov11_seg/exp1/weights/best.pt \
-  --data data/hospital_coco/yolo/data.yaml
+  --data data/hospital_coco/yolo/data.yaml \
+  --imgsz 640
 ```
 
 ## Visualization
 
+This script is mainly used to quickly inspect whether predicted masks, boxes, and
+class labels look reasonable on sample images.
+這支腳本主要用來快速檢查 prediction mask、bbox 和類別名稱在樣本影像上是否合理。
+
 ```bash
-python -m scripts.yolov11_seg.visualize --model output/yolov11_seg/exp1/weights/best.pt --source data/test/images --max-images 10
+python -m scripts.yolov11_seg.visualize \
+  --model output/yolov11_seg/exp1/weights/best.pt \
+  --source data/test/images \
+  --max-images 10 \
+  --save
 ```
+
+Notes:
+
+- `--source` can be a single image, an image folder, or a video path.
+- `--save` stores rendered prediction images in the Ultralytics default output folder.
+- `--show` opens a window to preview the rendered results interactively.
+- `retina_masks=True` is enabled in this script so saved masks are drawn with higher quality.
+
+中文補充：
+
+- `--source` 可以是單張圖片、圖片資料夾或影片路徑。
+- `--save` 會把視覺化結果存到 Ultralytics 預設輸出資料夾。
+- `--show` 會開啟視窗互動式預覽結果。
+- 這支腳本已啟用 `retina_masks=True`，輸出的 segmentation mask 邊界會比較細緻。
 
 ## Notes
 

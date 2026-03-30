@@ -2,7 +2,23 @@
 Train YOLOv11 segmentation model using Ultralytics on the shared COCO dataset.
 
 Usage:
-    python -m scripts.yolov11_seg.train
+python -m scripts.yolov11_seg.train  \
+  --data-root data/medbin_dataset  \
+  --epochs 120  \
+  --batch-size 16  \
+  --imgsz 640  \
+  --hsv-h 0.01  \
+  --hsv-s 0.2  \
+  --hsv-v 0.15  \
+  --degrees 5  \
+  --translate 0.08  \
+  --scale 0.15  \
+  --shear 2  \
+  --perspective 0.0  \
+  --flipud 0.0  \
+  --fliplr 0.5  \
+  --mosaic 0.2  \
+  --mixup 0.0 
 """
 import argparse
 from pathlib import Path
@@ -21,22 +37,27 @@ def resolve_ultralytics_save_args(output_dir: str) -> tuple[str, str]:
 
 def main():
     parser = argparse.ArgumentParser(description="Train YOLOv11 on the shared COCO dataset")
-    parser.add_argument("--data-yaml", type=str, default=None,
-                       help="Path to an existing YOLO data.yaml")
-    parser.add_argument("--data-root", type=str, default=None,
-                       help="COCO dataset root shared with mask2former, e.g. data/hospital_coco")
-    parser.add_argument("--model", type=str, default=None,
-                       help="Model name/size (overrides config)")
-    parser.add_argument("--output-dir", type=str, default=None,
-                       help="Directory to save trained model outputs")
-    parser.add_argument("--epochs", type=int, default=None,
-                       help="Number of epochs (overrides config)")
-    parser.add_argument("--batch-size", type=int, default=None,
-                       help="Batch size (overrides config)")
-    parser.add_argument("--workers", type=int, default=None,
-                       help="Dataloader workers for Ultralytics; use 0 in Docker if shm is limited")
-    parser.add_argument("--from-scratch", action="store_true",
-                       help="Initialize from YAML architecture instead of pretrained .pt weights")
+    parser.add_argument("--data-yaml", type=str, default=None, help="Path to an existing YOLO data.yaml")
+    parser.add_argument("--data-root", type=str, default=None, help="COCO dataset root shared with mask2former, e.g. data/hospital_coco")
+    parser.add_argument("--model", type=str, default=None, help="Model name/size (overrides config)")
+    parser.add_argument("--output-dir", type=str, default=None, help="Directory to save trained model outputs")
+    parser.add_argument("--epochs", type=int, default=None, help="Number of epochs (overrides config)")
+    parser.add_argument("--batch-size", type=int, default=None, help="Batch size (overrides config)")
+    parser.add_argument("--imgsz", type=int, required=True, help="Input image size for train/val/test resize")
+    parser.add_argument("--workers", type=int, default=None, help="Dataloader workers for Ultralytics; use 0 in Docker if shm is limited")
+    parser.add_argument("--hsv-h", type=float, default=None, help="HSV hue augmentation strength")
+    parser.add_argument("--hsv-s", type=float, default=None, help="HSV saturation augmentation strength")
+    parser.add_argument("--hsv-v", type=float, default=None, help="HSV value augmentation strength")
+    parser.add_argument("--degrees", type=float, default=None, help="Rotation augmentation in degrees")
+    parser.add_argument("--translate", type=float, default=None, help="Translation augmentation ratio")
+    parser.add_argument("--scale", type=float, default=None, help="Scale augmentation ratio")
+    parser.add_argument("--shear", type=float, default=None, help="Shear augmentation in degrees")
+    parser.add_argument("--perspective", type=float, default=None, help="Perspective augmentation ratio")
+    parser.add_argument("--flipud", type=float, default=None, help="Vertical flip probability")
+    parser.add_argument("--fliplr", type=float, default=None, help="Horizontal flip probability")
+    parser.add_argument("--mosaic", type=float, default=None, help="Mosaic augmentation probability")
+    parser.add_argument("--mixup", type=float, default=None, help="MixUp augmentation probability")
+    parser.add_argument("--from-scratch", action="store_true", help="Initialize from YAML architecture instead of pretrained .pt weights")
     args = parser.parse_args()
 
     # Load configurations
@@ -53,14 +74,39 @@ def main():
         model_cfg.epochs = args.epochs
     if args.batch_size:
         model_cfg.batch_size = args.batch_size
+    data_cfg.image_size = args.imgsz
     if args.workers is not None:
         train_cfg.workers = args.workers
+    if args.hsv_h is not None:
+        train_cfg.hsv_h = args.hsv_h
+    if args.hsv_s is not None:
+        train_cfg.hsv_s = args.hsv_s
+    if args.hsv_v is not None:
+        train_cfg.hsv_v = args.hsv_v
+    if args.degrees is not None:
+        train_cfg.degrees = args.degrees
+    if args.translate is not None:
+        train_cfg.translate = args.translate
+    if args.scale is not None:
+        train_cfg.scale = args.scale
+    if args.shear is not None:
+        train_cfg.shear = args.shear
+    if args.perspective is not None:
+        train_cfg.perspective = args.perspective
+    if args.flipud is not None:
+        train_cfg.flipud = args.flipud
+    if args.fliplr is not None:
+        train_cfg.fliplr = args.fliplr
+    if args.mosaic is not None:
+        train_cfg.mosaic = args.mosaic
+    if args.mixup is not None:
+        train_cfg.mixup = args.mixup
     if args.from_scratch:
         model_cfg.pretrained = False
 
     if args.data_root:
         data_cfg.data_root = args.data_root
-        data_cfg.yolo_dataset_dir = str(Path(args.data_root) / "yolo")
+        data_cfg.yolo_dataset_dir = str(Path(args.data_root) / "yolo_segmentation")
         data_cfg.data_yaml_path = str(Path(data_cfg.yolo_dataset_dir) / "data.yaml")
 
     # Handle dataset
@@ -70,6 +116,7 @@ def main():
         data_yaml = build_yolo_dataset_from_coco(
             coco_root=data_cfg.data_root,
             output_root=data_cfg.yolo_dataset_dir,
+            preserve_category_ids=True,
         )
 
     print(f"Using data.yaml: {data_yaml}")

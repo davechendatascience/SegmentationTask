@@ -19,10 +19,24 @@ def load_coco(ann_path: Path) -> dict:
         return json.load(f)
 
 
-def _category_metadata(categories: List[dict]) -> Tuple[Dict[int, int], List[str]]:
+def _category_metadata(
+    categories: List[dict],
+    preserve_category_ids: bool = True,
+) -> Tuple[Dict[int, int], List[str]]:
     sorted_cats = sorted(categories, key=lambda c: c["id"])
-    cat_id_to_idx = {cat["id"]: idx for idx, cat in enumerate(sorted_cats)}
-    names = [cat["name"] for cat in sorted_cats]
+
+    if not preserve_category_ids:
+        cat_id_to_idx = {cat["id"]: idx for idx, cat in enumerate(sorted_cats)}
+        names = [cat["name"] for cat in sorted_cats]
+        return cat_id_to_idx, names
+
+    max_category_id = max(int(cat["id"]) for cat in sorted_cats)
+    names = [f"unused_class_{idx}" for idx in range(max_category_id + 1)]
+    cat_id_to_idx: Dict[int, int] = {}
+    for cat in sorted_cats:
+        cat_id = int(cat["id"])
+        cat_id_to_idx[cat_id] = cat_id
+        names[cat_id] = str(cat["name"])
     return cat_id_to_idx, names
 
 
@@ -78,6 +92,7 @@ def build_yolo_dataset_from_coco(
     coco_root: str | Path,
     output_root: str | Path | None = None,
     output_yaml: str = "data.yaml",
+    preserve_category_ids: bool = True,
 ) -> Path:
     """
     Convert the COCO dataset used by mask2former into a YOLO-seg dataset.
@@ -105,9 +120,17 @@ def build_yolo_dataset_from_coco(
             raise FileNotFoundError(f"Annotation not found: {ann_path}")
 
         coco = load_coco(ann_path)
-        cat_id_to_idx, names = _category_metadata(coco["categories"])
+        cat_id_to_idx, names = _category_metadata(
+            coco["categories"],
+            preserve_category_ids=preserve_category_ids,
+        )
         if class_names is None:
             class_names = names
+        elif class_names != names:
+            raise RuntimeError(
+                f"Category definition mismatch between splits under {coco_root}. "
+                "Expected the same categories ordering/names across all processed splits."
+            )
 
         images_by_id = {img["id"]: img for img in coco["images"]}
         anns_by_image: Dict[int, List[dict]] = {}

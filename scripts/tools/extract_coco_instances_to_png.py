@@ -71,6 +71,7 @@ def resolve_image_path(split_dir: Path, file_name: str) -> Path:
 
 def segmentation_to_binary_mask(segmentation, height: int, width: int) -> np.ndarray:
     # COCO segmentation 可能是 polygon list 或 RLE dict，統一轉成 (H, W) binary mask。
+    print(type(segmentation))
     if isinstance(segmentation, list):
         if not segmentation:
             return np.zeros((height, width), dtype=np.uint8)
@@ -167,6 +168,9 @@ def extract_split(
         for ann in grouped_annotations.get(image_id, []):
             # crowd 標註通常不是單一乾淨 instance，不適合直接輸出成單張 PNG。
             if ann.get("iscrowd", 0):
+                print(
+                    "Warning: iscrowd : 1. Skipping this image."
+                )                
                 skipped_count += 1
                 continue
 
@@ -179,11 +183,18 @@ def extract_split(
             mask_area = int(mask.sum())
             # 太小的 mask 可能只是噪聲或幾乎看不見，依設定直接略過。
             if mask_area < min_mask_area:
+                print(
+                   f"Warning: min_mask_area < {min_mask_area} for {image_info['file_name']}. Skipping this image."
+                )          
                 skipped_count += 1
                 continue
 
             box = mask_to_xyxy(mask)
             if box is None:
+                print(ann.get("id"))
+                print(
+                   f"Warning: No valid front-scene for {image_info['file_name']}. Skipping this image."
+                )                 
                 skipped_count += 1
                 continue
 
@@ -239,7 +250,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-root", default="output/instance_pngs", help="Directory to save instance PNGs")
     parser.add_argument("--splits", nargs="+", default=["train", "valid", "test"])
     parser.add_argument("--padding", type=int, default=0, help="Extra pixel padding around each instance crop")
-    parser.add_argument("--min-mask-area", type=int, default=16, help="Skip instances smaller than this mask area")
+    parser.add_argument("--min-mask-area", type=int, default=0, help="Skip instances smaller than this mask area")
     parser.add_argument("--save-full-mask", action="store_true", help="Also save one full-size binary mask PNG per instance")
     return parser.parse_args()
 
