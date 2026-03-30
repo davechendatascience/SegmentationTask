@@ -1,6 +1,6 @@
 """
 下載 COCO 2017 指定類別，並輸出成明確的 COCO 資料夾格式。
-Download selected COCO 2017 classes and export them in a clear COCO folder layout.
+Download selected COCO 2017 classes and export split annotations without copying images.
 
 Usage:
     python -m scripts.tools.download_coco2017_by_class --output-root data/coco_filtered
@@ -14,13 +14,10 @@ Example:
     <output-root>/
       train/
         _annotations.coco.json
-        *.jpg
       valid/
         _annotations.coco.json
-        *.jpg
       test/
         _annotations.coco.json
-        *.jpg
 
 下載來源說明 / Download source:
     COCO 原始資料會由 FiftyOne 下載到其預設 cache 位置，
@@ -30,6 +27,7 @@ Example:
 """
 
 import argparse
+import json
 from pathlib import Path
 
 import fiftyone as fo
@@ -47,7 +45,7 @@ SPLIT_EXPORT_NAMES = {
 def parse_args() -> argparse.Namespace:
     """解析命令列參數。Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Download COCO 2017 samples with FiftyOne and export them in COCO folder format"
+        description="Download COCO 2017 samples with FiftyOne and export COCO annotations that point to the FiftyOne cache"
     )
     parser.add_argument(
         "--output-root",
@@ -73,21 +71,52 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def rewrite_annotation_file_names(dataset: fo.Dataset, labels_path: Path) -> None:
+    """將 COCO annotations 的 file_name 改成對應的 cache 影像路徑。Rewrite file_name entries to point to cached images."""
+    file_name_to_path = {}
+    for sample in dataset.iter_samples(progress=True):
+        sample_path = Path(sample.filepath)
+        file_name_to_path[sample_path.name] = sample_path.as_posix()
+
+    with labels_path.open("r", encoding="utf-8") as f:
+        coco_data = json.load(f)
+
+    missing_files: list[str] = []
+    for image in coco_data.get("images", []):
+        exported_name = Path(image["file_name"]).name
+        cached_path = file_name_to_path.get(exported_name)
+        if cached_path is None:
+            missing_files.append(exported_name)
+            continue
+        image["file_name"] = cached_path
+
+    if missing_files:
+        preview = ", ".join(missing_files[:5])
+        raise ValueError(
+            "Failed to map some exported COCO image names back to the FiftyOne cache: "
+            f"{preview}"
+        )
+
+    with labels_path.open("w", encoding="utf-8") as f:
+        json.dump(coco_data, f, ensure_ascii=False)
+
+
 def export_split(dataset: fo.Dataset, output_root: Path, split_name: str) -> None:
-    """將單一 split 匯出為 COCO 格式。Export one split in COCO format."""
+    """將單一 split 匯出為只含 annotations 的 COCO 格式。Export one split as COCO annotations only."""
     export_split_name = SPLIT_EXPORT_NAMES[split_name]
     split_dir = output_root / export_split_name
     split_dir.mkdir(parents=True, exist_ok=True)
+    labels_path = split_dir / "_annotations.coco.json"
 
-    # 匯出成每個 split 一個資料夾，並固定 annotation 檔名為 _annotations.coco.json。
-    # Export each split into its own folder with a fixed COCO annotation filename.
+    # 只輸出 annotations，不複製圖片；後續再把 file_name 重寫成 cache 內的實際路徑。
+    # Export annotations only without copying images, then rewrite file_name to cached image paths.
     dataset.export(
         export_dir=str(split_dir),
         dataset_type=fo.types.COCODetectionDataset,
-        data_path=str(split_dir),
-        labels_path=str(split_dir / "_annotations.coco.json"),
-        export_media="copy",
+        labels_path=str(labels_path),
+        export_media=False,
     )
+    rewrite_annotation_file_names(dataset, labels_path)
     print(f"Exported split: {split_name} -> {split_dir}")
 
 
